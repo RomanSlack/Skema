@@ -158,7 +158,7 @@ async def create_journal_entry(
             content=entry_data.content,
             mood=entry_data.mood,
             tags=entry_data.tags or [],
-            metadata=entry_data.metadata or {},
+            meta_data=entry_data.metadata or {},  # Use meta_data field name
             entry_date=entry_date,
             is_private=entry_data.is_private,
             is_favorite=entry_data.is_favorite
@@ -254,7 +254,7 @@ async def update_journal_entry(
         if entry_update.tags is not None:
             entry.tags = entry_update.tags
         if entry_update.metadata is not None:
-            entry.metadata = entry_update.metadata
+            entry.meta_data = entry_update.metadata
         if entry_update.entry_date is not None:
             entry.entry_date = entry_update.entry_date
         if entry_update.is_private is not None:

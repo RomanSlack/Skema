@@ -152,7 +152,7 @@ def upgrade() -> None:
         sa.Column('content', sa.Text(), nullable=False),
         sa.Column('mood', sa.String(50), nullable=True),
         sa.Column('tags', postgresql.ARRAY(sa.String()), nullable=True, server_default='{}'),
-        sa.Column('metadata', postgresql.JSONB(), nullable=True, 
+        sa.Column('meta_data', postgresql.JSONB(), nullable=True, 
                   server_default=sa.text("""'{
                       "weather": null,
                       "location": null,
@@ -262,7 +262,7 @@ def upgrade() -> None:
     op.create_index('idx_boards_settings', 'boards', ['settings'], postgresql_using='gin')
     op.create_index('idx_cards_metadata', 'cards', ['metadata'], postgresql_using='gin')
     op.create_index('idx_calendar_events_metadata', 'calendar_events', ['metadata'], postgresql_using='gin')
-    op.create_index('idx_journal_entries_metadata', 'journal_entries', ['metadata'], postgresql_using='gin')
+    op.create_index('idx_journal_entries_metadata', 'journal_entries', ['meta_data'], postgresql_using='gin')
     op.create_index('idx_ai_commands_metadata', 'ai_commands', ['metadata'], postgresql_using='gin')
     op.create_index('idx_journal_entries_tags', 'journal_entries', ['tags'], postgresql_using='gin')
     
@@ -315,9 +315,9 @@ def upgrade() -> None:
         CREATE OR REPLACE FUNCTION update_journal_entry_stats()
         RETURNS TRIGGER AS $$
         BEGIN
-            NEW.metadata = jsonb_set(
+            NEW.meta_data = jsonb_set(
                 jsonb_set(
-                    COALESCE(NEW.metadata, '{}'::jsonb),
+                    COALESCE(NEW.meta_data, '{}'::jsonb),
                     '{word_count}',
                     to_jsonb(array_length(string_to_array(NEW.content, ' '), 1))
                 ),

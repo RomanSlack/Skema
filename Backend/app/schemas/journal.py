@@ -22,6 +22,7 @@ class JournalEntryCreate(BaseModel):
     @validator('mood')
     def validate_mood(cls, v):
         allowed_moods = [
+            'great', 'good', 'okay', 'bad', 'terrible',  # Frontend moods
             'happy', 'sad', 'excited', 'calm', 'anxious', 'angry', 
             'grateful', 'hopeful', 'frustrated', 'content', 'stressed', 'other'
         ]
@@ -61,6 +62,7 @@ class JournalEntryUpdate(BaseModel):
     @validator('mood')
     def validate_mood(cls, v):
         allowed_moods = [
+            'great', 'good', 'okay', 'bad', 'terrible',  # Frontend moods
             'happy', 'sad', 'excited', 'calm', 'anxious', 'angry', 
             'grateful', 'hopeful', 'frustrated', 'content', 'stressed', 'other'
         ]
@@ -95,6 +97,25 @@ class JournalEntryResponse(BaseModel):
     is_private: bool = Field(description="Private entry flag")
     is_favorite: bool = Field(description="Favorite entry flag")
     
+    @classmethod
+    def from_orm(cls, obj):
+        """Create JournalEntryResponse from ORM object with field mapping"""
+        data = {
+            'id': obj.id,
+            'user_id': obj.user_id,
+            'title': obj.title,
+            'content': obj.content,
+            'mood': obj.mood,
+            'tags': obj.tags or [],
+            'metadata': obj.meta_data or {},  # Map meta_data to metadata
+            'entry_date': obj.entry_date,
+            'created_at': obj.created_at,
+            'updated_at': obj.updated_at,
+            'is_private': obj.is_private,
+            'is_favorite': obj.is_favorite,
+        }
+        return cls(**data)
+    
     class Config:
         from_attributes = True
         json_encoders = {
@@ -116,6 +137,7 @@ class JournalEntryFilter(BaseModel):
     @validator('mood')
     def validate_mood(cls, v):
         allowed_moods = [
+            'great', 'good', 'okay', 'bad', 'terrible',  # Frontend moods
             'happy', 'sad', 'excited', 'calm', 'anxious', 'angry', 
             'grateful', 'hopeful', 'frustrated', 'content', 'stressed', 'other'
         ]
