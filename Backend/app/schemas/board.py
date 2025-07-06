@@ -137,7 +137,7 @@ class CardResponse(BaseModel):
     description: Optional[str] = Field(description="Card description")
     status: str = Field(description="Card status")
     priority: str = Field(description="Card priority")
-    card_metadata: Dict[str, Any] = Field(description="Card metadata", alias="metadata")
+    metadata: Dict[str, Any] = Field(description="Card metadata")
     position: int = Field(description="Card position")
     created_at: datetime = Field(description="Card creation timestamp")
     updated_at: datetime = Field(description="Card last update timestamp")
@@ -145,9 +145,28 @@ class CardResponse(BaseModel):
     
     class Config:
         from_attributes = True
+        populate_by_name = True
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
+        
+    @classmethod
+    def from_orm(cls, obj):
+        # Map the SQLAlchemy field to the response field
+        data = {
+            'id': obj.id,
+            'board_id': obj.board_id,
+            'title': obj.title,
+            'description': obj.description,
+            'status': obj.status,
+            'priority': obj.priority,
+            'metadata': obj.card_metadata,  # Map card_metadata to metadata
+            'position': obj.position,
+            'created_at': obj.created_at,
+            'updated_at': obj.updated_at,
+            'completed_at': obj.completed_at
+        }
+        return cls(**data)
 
 
 class BoardWithCards(BaseModel):
