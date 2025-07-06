@@ -1,0 +1,141 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skema-api"
+version = "1.0.0"
+description = "Production-ready FastAPI backend for Skema productivity app"
+authors = [
+    {name = "Skema Team", email = "dev@skema.app"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Office/Business :: Scheduling",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+keywords = ["fastapi", "productivity", "kanban", "calendar", "journal"]
+
+dependencies = [
+    "fastapi>=0.104.1",
+    "uvicorn[standard]>=0.24.0",
+    "sqlmodel>=0.0.14",
+    "alembic>=1.13.1",
+    "asyncpg>=0.29.0",
+    "psycopg2-binary>=2.9.9",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-multipart>=0.0.6",
+    "python-dotenv>=1.0.0",
+    "pydantic-settings>=2.0.3",
+    "httpx>=0.25.2",
+    "websockets>=12.0",
+    "slowapi>=0.1.9",
+    "redis>=5.0.1",
+    "structlog>=23.2.0",
+    "rich>=13.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.1",
+    "black>=23.11.0",
+    "isort>=5.12.0",
+    "flake8>=6.1.0",
+    "mypy>=1.7.1",
+]
+ai = [
+    "openai>=1.3.7",
+]
+celery = [
+    "celery>=5.3.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/skema/skema-api"
+Documentation = "https://docs.skema.app"
+Repository = "https://github.com/skema/skema-api"
+Issues = "https://github.com/skema/skema-api/issues"
+
+[project.scripts]
+skema-api = "app.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py38", "py39", "py310", "py311"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.git
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | buck-out
+    | build
+    | dist
+    | migrations
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["app"]
+skip_glob = ["migrations/*"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = [
+    "alembic.*",
+    "sqlalchemy.*",
+    "passlib.*",
+    "jose.*",
+    "redis.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+asyncio_mode = "auto"

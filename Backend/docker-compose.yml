@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # FastAPI Application
+  api:
+    build:
+      context: .
+      target: development
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://skema:skema_password@db:5432/skema
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=your-super-secret-jwt-key-change-this-in-production
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    networks:
+      - skema-network
+
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=skema
+      - POSTGRES_USER=skema
+      - POSTGRES_PASSWORD=skema_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - skema-network
+
+  # Redis for caching and rate limiting
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - skema-network
+
+  # Nginx reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - skema-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  skema-network:
+    driver: bridge

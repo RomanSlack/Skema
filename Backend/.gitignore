@@ -205,3 +205,22 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Skema API specific
+logs/
+*.log
+backups/
+*.backup
+
+# Database files
+*.db
+*.sqlite
+
+# SSL certificates
+*.pem
+*.key
+*.crt
+
+# Local configuration overrides
+.env.local
+.env.production
