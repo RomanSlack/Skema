@@ -292,19 +292,21 @@ def add_rate_limiting_middleware(app: FastAPI) -> None:
     Args:
         app: FastAPI application instance
     """
-    # Add general rate limiting
-    app.add_middleware(
-        RateLimitMiddleware,
-        requests_per_minute=settings.rate_limit_requests_per_minute,
-        burst_requests=settings.rate_limit_burst,
-        burst_window=60
-    )
-    
-    # Add API key based rate limiting (if configured)
-    api_key_limits = getattr(settings, 'api_key_limits', {})
-    if api_key_limits:
+    # Only add rate limiting if enabled
+    if settings.enable_rate_limiting:
+        # Add general rate limiting
         app.add_middleware(
-            APIKeyRateLimitMiddleware,
-            api_key_limits=api_key_limits,
-            default_limit=1000
+            RateLimitMiddleware,
+            requests_per_minute=settings.rate_limit_requests_per_minute,
+            burst_requests=settings.rate_limit_burst,
+            burst_window=60
         )
+        
+        # Add API key based rate limiting (if configured)
+        api_key_limits = getattr(settings, 'api_key_limits', {})
+        if api_key_limits:
+            app.add_middleware(
+                APIKeyRateLimitMiddleware,
+                api_key_limits=api_key_limits,
+                default_limit=1000
+            )

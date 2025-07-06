@@ -54,6 +54,7 @@ class BoardResponse(BaseModel):
     created_at: datetime = Field(description="Board creation timestamp")
     updated_at: datetime = Field(description="Board last update timestamp")
     is_archived: bool = Field(description="Board archived status")
+    is_starred: bool = Field(description="Board starred status")
     
     class Config:
         from_attributes = True
@@ -69,7 +70,7 @@ class CardCreate(BaseModel):
     description: Optional[str] = Field(default=None, description="Card description")
     status: Optional[str] = Field(default="todo", description="Card status")
     priority: Optional[str] = Field(default="medium", description="Card priority")
-    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Card metadata")
+    card_metadata: Optional[Dict[str, Any]] = Field(default=None, description="Card metadata", alias="metadata")
     position: Optional[int] = Field(default=0, description="Card position")
     
     @validator('status')
@@ -94,7 +95,7 @@ class CardUpdate(BaseModel):
     description: Optional[str] = Field(default=None, description="Card description")
     status: Optional[str] = Field(default=None, description="Card status")
     priority: Optional[str] = Field(default=None, description="Card priority")
-    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Card metadata")
+    card_metadata: Optional[Dict[str, Any]] = Field(default=None, description="Card metadata", alias="metadata")
     position: Optional[int] = Field(default=None, description="Card position")
     
     @validator('status')
@@ -136,7 +137,7 @@ class CardResponse(BaseModel):
     description: Optional[str] = Field(description="Card description")
     status: str = Field(description="Card status")
     priority: str = Field(description="Card priority")
-    metadata: Dict[str, Any] = Field(description="Card metadata")
+    card_metadata: Dict[str, Any] = Field(description="Card metadata", alias="metadata")
     position: int = Field(description="Card position")
     created_at: datetime = Field(description="Card creation timestamp")
     updated_at: datetime = Field(description="Card last update timestamp")
@@ -161,6 +162,7 @@ class BoardWithCards(BaseModel):
     created_at: datetime = Field(description="Board creation timestamp")
     updated_at: datetime = Field(description="Board last update timestamp")
     is_archived: bool = Field(description="Board archived status")
+    is_starred: bool = Field(description="Board starred status")
     cards: List[CardResponse] = Field(description="Board cards")
     
     class Config:

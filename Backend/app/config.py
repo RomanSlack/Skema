@@ -41,8 +41,9 @@ class Settings(BaseSettings):
     allowed_headers: List[str] = Field(default=["*"])
     
     # Rate Limiting
-    rate_limit_requests_per_minute: int = Field(default=60, env="RATE_LIMIT_REQUESTS_PER_MINUTE")
-    rate_limit_burst: int = Field(default=10, env="RATE_LIMIT_BURST")
+    enable_rate_limiting: bool = Field(default=False, env="ENABLE_RATE_LIMITING")
+    rate_limit_requests_per_minute: int = Field(default=1000, env="RATE_LIMIT_REQUESTS_PER_MINUTE")
+    rate_limit_burst: int = Field(default=500, env="RATE_LIMIT_BURST")
     
     # Email (optional)
     smtp_host: Optional[str] = Field(default=None, env="SMTP_HOST")

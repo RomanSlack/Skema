@@ -369,7 +369,7 @@ async def create_card(
             description=card_data.description,
             status=card_data.status,
             priority=card_data.priority,
-            card_metadata=card_data.metadata or {},
+            card_metadata=card_data.card_metadata or {},
             position=card_data.position
         )
         
@@ -436,8 +436,8 @@ async def update_card(
             card.status = card_update.status
         if card_update.priority is not None:
             card.priority = card_update.priority
-        if card_update.metadata is not None:
-            card.card_metadata = card_update.metadata
+        if card_update.card_metadata is not None:
+            card.card_metadata = card_update.card_metadata
         if card_update.position is not None:
             card.position = card_update.position
         
