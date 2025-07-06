@@ -3,9 +3,9 @@ Database connection and session management
 """
 import logging
 from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlmodel import SQLModel
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 
@@ -22,13 +22,11 @@ engine = create_async_engine(
     pool_timeout=30,
 )
 
-# Create async session factory
+# Create async session factory using SQLModel's AsyncSession
 AsyncSessionLocal = async_sessionmaker(
     engine,
     class_=AsyncSession,
     expire_on_commit=False,
-    autocommit=False,
-    autoflush=False,
 )
 
 

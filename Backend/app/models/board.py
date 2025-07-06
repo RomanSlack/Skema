@@ -49,6 +49,7 @@ class Board(SQLModel, table=True):
         sa_column=Column(TIMESTAMP(timezone=True), server_default=text("CURRENT_TIMESTAMP"))
     )
     is_archived: bool = Field(default=False, index=True)
+    is_starred: bool = Field(default=False, index=True)
 
 
 class Card(SQLModel, table=True):
@@ -66,7 +67,7 @@ class Card(SQLModel, table=True):
     description: Optional[str] = Field(default=None)
     status: str = Field(max_length=50, default="todo", index=True)
     priority: str = Field(max_length=20, default="medium", index=True)
-    meta_data: Dict[str, Any] = Field(
+    card_metadata: Dict[str, Any] = Field(
         default_factory=lambda: {
             "tags": [],
             "due_date": None,
@@ -76,7 +77,8 @@ class Card(SQLModel, table=True):
             "estimated_hours": None,
             "actual_hours": None
         },
-        sa_column=Column(JSON)
+        sa_column=Column(JSON),
+        alias="metadata"
     )
     position: int = Field(default=0)
     created_at: datetime = Field(
