@@ -122,7 +122,7 @@ async def create_calendar_event(
             location=event_data.location,
             event_type=event_data.event_type,
             color=event_data.color,
-            metadata=event_data.metadata or {},
+            meta_data=event_data.metadata or {},
             is_all_day=event_data.is_all_day,
             is_recurring=event_data.is_recurring
         )
@@ -140,6 +140,46 @@ async def create_calendar_event(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create calendar event"
+        )
+
+
+@router.get("/events/upcoming", response_model=List[CalendarEventResponse])
+async def get_upcoming_events(
+    limit: int = Query(10, ge=1, le=50, description="Number of upcoming events"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Get upcoming calendar events.
+    
+    Args:
+        limit: Maximum number of events to return
+        current_user: Current authenticated user
+        session: Database session
+        
+    Returns:
+        List[CalendarEventResponse]: List of upcoming calendar events
+    """
+    try:
+        now = datetime.now(timezone.utc)
+        
+        query = select(CalendarEvent).where(
+            and_(
+                CalendarEvent.user_id == current_user.id,
+                CalendarEvent.start_datetime >= now
+            )
+        ).order_by(CalendarEvent.start_datetime).limit(limit)
+        
+        result = await session.exec(query)
+        events = result.all()
+        
+        return [CalendarEventResponse.from_orm(event) for event in events]
+    
+    except Exception as e:
+        logger.error(f"Get upcoming events error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve upcoming events"
         )
 
 
@@ -355,44 +395,4 @@ async def get_events_by_date(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve events for date"
-        )
-
-
-@router.get("/events/upcoming", response_model=List[CalendarEventResponse])
-async def get_upcoming_events(
-    limit: int = Query(10, ge=1, le=50, description="Number of upcoming events"),
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
-):
-    """
-    Get upcoming calendar events.
-    
-    Args:
-        limit: Maximum number of events to return
-        current_user: Current authenticated user
-        session: Database session
-        
-    Returns:
-        List[CalendarEventResponse]: List of upcoming calendar events
-    """
-    try:
-        now = datetime.now(timezone.utc)
-        
-        query = select(CalendarEvent).where(
-            and_(
-                CalendarEvent.user_id == current_user.id,
-                CalendarEvent.start_datetime >= now
-            )
-        ).order_by(CalendarEvent.start_datetime).limit(limit)
-        
-        result = await session.exec(query)
-        events = result.all()
-        
-        return [CalendarEventResponse.from_orm(event) for event in events]
-    
-    except Exception as e:
-        logger.error(f"Get upcoming events error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve upcoming events"
         )

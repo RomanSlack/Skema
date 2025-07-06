@@ -93,9 +93,31 @@ class CalendarEventResponse(BaseModel):
     
     class Config:
         from_attributes = True
+        populate_by_name = True
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
+        
+    @classmethod
+    def from_orm(cls, obj):
+        # Map the SQLAlchemy field to the response field
+        data = {
+            'id': obj.id,
+            'user_id': obj.user_id,
+            'title': obj.title,
+            'description': obj.description,
+            'start_datetime': obj.start_datetime,
+            'end_datetime': obj.end_datetime,
+            'location': obj.location,
+            'event_type': obj.event_type,
+            'color': obj.color,
+            'metadata': obj.meta_data,  # Map meta_data to metadata
+            'created_at': obj.created_at,
+            'updated_at': obj.updated_at,
+            'is_all_day': obj.is_all_day,
+            'is_recurring': obj.is_recurring
+        }
+        return cls(**data)
 
 
 class CalendarEventFilter(BaseModel):
