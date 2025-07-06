@@ -8,6 +8,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
+import json
+from datetime import datetime
 
 from app.config import settings
 from app.core.auth import get_current_user, verify_token
@@ -61,6 +64,18 @@ async def lifespan(app: FastAPI):
             logger.error(f"Shutdown error: {e}")
 
 
+# Custom JSON encoder for datetime objects
+class CustomJSONResponse(JSONResponse):
+    def render(self, content) -> bytes:
+        return json.dumps(
+            content,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+            default=jsonable_encoder,
+        ).encode("utf-8")
+
 # Create FastAPI application
 app = FastAPI(
     title=settings.app_name,
@@ -69,7 +84,8 @@ app = FastAPI(
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,
     openapi_url="/openapi.json" if settings.debug else None,
-    lifespan=lifespan
+    lifespan=lifespan,
+    default_response_class=CustomJSONResponse
 )
 
 # Add middleware (order matters!)

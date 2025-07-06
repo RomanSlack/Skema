@@ -12,7 +12,9 @@ class UserCreate(BaseModel):
     
     email: EmailStr = Field(description="User email address")
     password: str = Field(min_length=8, description="User password")
-    full_name: Optional[str] = Field(default=None, max_length=255, description="User full name")
+    username: str = Field(min_length=3, max_length=50, description="Username")
+    first_name: str = Field(min_length=1, max_length=100, description="User first name")
+    last_name: str = Field(min_length=1, max_length=100, description="User last name")
     avatar_url: Optional[str] = Field(default=None, description="User avatar URL")
     
     @validator('password')

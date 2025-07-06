@@ -62,10 +62,12 @@ async def register(
         
         # Create new user
         hashed_password = get_password_hash(user_data.password)
+        full_name = f"{user_data.first_name} {user_data.last_name}".strip()
         user = User(
             email=user_data.email,
+            username=user_data.username,
             hashed_password=hashed_password,
-            full_name=user_data.full_name,
+            full_name=full_name,
             avatar_url=user_data.avatar_url,
             is_active=True,
             email_verified=False

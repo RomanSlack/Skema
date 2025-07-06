@@ -19,6 +19,7 @@ class User(SQLModel, table=True):
         sa_column_kwargs={"server_default": text("uuid_generate_v4()")}
     )
     email: str = Field(max_length=255, unique=True, index=True)
+    username: str = Field(max_length=50, unique=True, index=True)
     hashed_password: str = Field(max_length=255)
     full_name: Optional[str] = Field(max_length=255, default=None)
     avatar_url: Optional[str] = Field(max_length=255, default=None)

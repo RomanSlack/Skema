@@ -33,14 +33,12 @@ class Settings(BaseSettings):
     
     # CORS
     allowed_origins: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:3001"], 
-        env="ALLOWED_ORIGINS"
+        default=["http://localhost:3000", "http://localhost:3001"]
     )
     allowed_methods: List[str] = Field(
-        default=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        env="ALLOWED_METHODS"
+        default=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     )
-    allowed_headers: List[str] = Field(default=["*"], env="ALLOWED_HEADERS")
+    allowed_headers: List[str] = Field(default=["*"])
     
     # Rate Limiting
     rate_limit_requests_per_minute: int = Field(default=60, env="RATE_LIMIT_REQUESTS_PER_MINUTE")
