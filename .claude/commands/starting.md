@@ -1,0 +1,1 @@
+Ok so in this project I am debugging some stuff so take a look around the project frontend and backend if it has those, to get a grip on stuff then report back to me so we can begin  
