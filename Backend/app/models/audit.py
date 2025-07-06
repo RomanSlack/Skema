@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from uuid import UUID, uuid4
 from sqlmodel import SQLModel, Field, Column, JSON
-from sqlalchemy import TIMESTAMP, text
+from sqlalchemy import TIMESTAMP, text, ForeignKey
 
 
 class AuditLog(SQLModel, table=True):
@@ -18,7 +18,7 @@ class AuditLog(SQLModel, table=True):
         primary_key=True,
         sa_column_kwargs={"server_default": text("uuid_generate_v4()")}
     )
-    user_id: Optional[UUID] = Field(foreign_key="users.id", ondelete="SET NULL", default=None)
+    user_id: Optional[UUID] = Field(default=None, sa_column=Column(ForeignKey("users.id", ondelete="SET NULL")))
     action: str = Field(max_length=100)
     resource_type: str = Field(max_length=50)
     resource_id: Optional[UUID] = Field(default=None)

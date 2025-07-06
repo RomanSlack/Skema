@@ -3,8 +3,8 @@ Configuration management for the Skema API
 """
 import os
 from typing import List, Optional, Any
-from pydantic import Field, validator
-from pydantic_settings import BaseSettings
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -68,39 +68,46 @@ class Settings(BaseSettings):
     sentry_dsn: Optional[str] = Field(default=None, env="SENTRY_DSN")
     enable_metrics: bool = Field(default=True, env="ENABLE_METRICS")
     
-    @validator('allowed_origins', pre=True)
+    @field_validator('allowed_origins', mode='before')
+    @classmethod
     def parse_cors_origins(cls, v):
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(',')]
         return v
     
-    @validator('allowed_methods', pre=True)
+    @field_validator('allowed_methods', mode='before')
+    @classmethod
     def parse_cors_methods(cls, v):
         if isinstance(v, str):
             return [method.strip() for method in v.split(',')]
         return v
     
-    @validator('allowed_headers', pre=True)
+    @field_validator('allowed_headers', mode='before')
+    @classmethod
     def parse_cors_headers(cls, v):
         if isinstance(v, str):
             return [header.strip() for header in v.split(',')]
         return v
     
-    @validator('jwt_secret_key')
+    @field_validator('jwt_secret_key')
+    @classmethod
     def validate_jwt_secret_key(cls, v):
         if not v or len(v) < 32:
             raise ValueError('JWT secret key must be at least 32 characters long')
         return v
     
-    @validator('database_url')
+    @field_validator('database_url')
+    @classmethod
     def validate_database_url(cls, v):
         if not v:
             raise ValueError('Database URL is required')
         return v
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        extra='ignore'
+    )
 
 
 # Global settings instance

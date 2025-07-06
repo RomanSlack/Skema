@@ -34,6 +34,22 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Function to start services locally
+start_local_services() {
+    print_status "Starting services locally..."
+    print_warning "Note: This will only start the frontend. For the full stack, please use Docker."
+    
+    cd Frontend
+    print_status "Installing frontend dependencies..."
+    npm install
+    
+    print_status "Starting frontend development server..."
+    print_success "Frontend will be available at http://localhost:3000"
+    print_warning "Backend API is not started. You'll need Docker for the full stack."
+    
+    npm run dev
+}
+
 # Function to wait for service to be ready
 wait_for_service() {
     local service=$1
@@ -78,8 +94,22 @@ main() {
 
     # Check if Docker is running
     if ! docker info >/dev/null 2>&1; then
-        print_error "Docker is not running. Please start Docker first."
-        exit 1
+        print_warning "Docker is not running. Will try to start services locally instead."
+        
+        # Check for Node.js and Python
+        if ! command_exists node; then
+            print_error "Node.js is not installed. Please install Node.js 18+ or start Docker."
+            exit 1
+        fi
+        
+        if ! command_exists python3; then
+            print_error "Python is not installed. Please install Python 3.11+ or start Docker."
+            exit 1
+        fi
+        
+        # Start services locally
+        start_local_services
+        return
     fi
 
     print_success "Prerequisites check passed"

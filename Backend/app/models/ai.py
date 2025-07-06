@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from uuid import UUID, uuid4
 from sqlmodel import SQLModel, Field, Column, JSON
-from sqlalchemy import TIMESTAMP, text
+from sqlalchemy import TIMESTAMP, text, ForeignKey
 
 
 class AICommand(SQLModel, table=True):
@@ -18,7 +18,7 @@ class AICommand(SQLModel, table=True):
         primary_key=True,
         sa_column_kwargs={"server_default": text("uuid_generate_v4()")}
     )
-    user_id: UUID = Field(foreign_key="users.id", ondelete="CASCADE", index=True)
+    user_id: UUID = Field(sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), index=True))
     command: str = Field()
     response: Optional[str] = Field(default=None)
     context_type: Optional[str] = Field(max_length=50, default=None)
@@ -26,7 +26,7 @@ class AICommand(SQLModel, table=True):
     execution_time_ms: Optional[int] = Field(default=None)
     success: bool = Field(default=True)
     error_message: Optional[str] = Field(default=None)
-    metadata: Dict[str, Any] = Field(
+    meta_data: Dict[str, Any] = Field(
         default_factory=lambda: {
             "model": "gpt-4",
             "tokens_used": 0,

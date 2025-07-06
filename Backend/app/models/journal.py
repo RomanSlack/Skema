@@ -5,7 +5,7 @@ from datetime import datetime, timezone, date
 from typing import Optional, Dict, Any, List
 from uuid import UUID, uuid4
 from sqlmodel import SQLModel, Field, Column, JSON
-from sqlalchemy import TIMESTAMP, text, ARRAY, String
+from sqlalchemy import TIMESTAMP, text, ARRAY, String, ForeignKey
 
 
 class JournalEntry(SQLModel, table=True):
@@ -18,7 +18,7 @@ class JournalEntry(SQLModel, table=True):
         primary_key=True,
         sa_column_kwargs={"server_default": text("uuid_generate_v4()")}
     )
-    user_id: UUID = Field(foreign_key="users.id", ondelete="CASCADE", index=True)
+    user_id: UUID = Field(sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), index=True))
     title: Optional[str] = Field(max_length=255, default=None)
     content: str = Field()
     mood: Optional[str] = Field(max_length=50, default=None)
@@ -26,7 +26,7 @@ class JournalEntry(SQLModel, table=True):
         default_factory=list,
         sa_column=Column(ARRAY(String))
     )
-    metadata: Dict[str, Any] = Field(
+    meta_data: Dict[str, Any] = Field(
         default_factory=lambda: {
             "weather": None,
             "location": None,

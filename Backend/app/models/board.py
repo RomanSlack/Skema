@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from uuid import UUID, uuid4
 from sqlmodel import SQLModel, Field, Column, JSON
-from sqlalchemy import TIMESTAMP, text
+from sqlalchemy import TIMESTAMP, text, ForeignKey
 
 
 class Board(SQLModel, table=True):
@@ -18,7 +18,7 @@ class Board(SQLModel, table=True):
         primary_key=True,
         sa_column_kwargs={"server_default": text("uuid_generate_v4()")}
     )
-    user_id: UUID = Field(foreign_key="users.id", ondelete="CASCADE", index=True)
+    user_id: UUID = Field(sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), index=True))
     title: str = Field(max_length=255)
     description: Optional[str] = Field(default=None)
     color: str = Field(max_length=7, default="#6366f1")
@@ -61,12 +61,12 @@ class Card(SQLModel, table=True):
         primary_key=True,
         sa_column_kwargs={"server_default": text("uuid_generate_v4()")}
     )
-    board_id: UUID = Field(foreign_key="boards.id", ondelete="CASCADE", index=True)
+    board_id: UUID = Field(sa_column=Column(ForeignKey("boards.id", ondelete="CASCADE"), index=True))
     title: str = Field(max_length=255)
     description: Optional[str] = Field(default=None)
     status: str = Field(max_length=50, default="todo", index=True)
     priority: str = Field(max_length=20, default="medium", index=True)
-    metadata: Dict[str, Any] = Field(
+    meta_data: Dict[str, Any] = Field(
         default_factory=lambda: {
             "tags": [],
             "due_date": None,

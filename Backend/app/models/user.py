@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from uuid import UUID, uuid4
 from sqlmodel import SQLModel, Field, Column, JSON
-from sqlalchemy import TIMESTAMP, text
+from sqlalchemy import TIMESTAMP, text, ForeignKey
 
 
 class User(SQLModel, table=True):
@@ -64,7 +64,7 @@ class UserSession(SQLModel, table=True):
         primary_key=True,
         sa_column_kwargs={"server_default": text("uuid_generate_v4()")}
     )
-    user_id: UUID = Field(foreign_key="users.id", ondelete="CASCADE")
+    user_id: UUID = Field(sa_column=Column(ForeignKey("users.id", ondelete="CASCADE")))
     refresh_token: str = Field(max_length=255, index=True)
     user_agent: Optional[str] = Field(default=None)
     ip_address: Optional[str] = Field(default=None)

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from uuid import UUID, uuid4
 from sqlmodel import SQLModel, Field, Column, JSON
-from sqlalchemy import TIMESTAMP, text
+from sqlalchemy import TIMESTAMP, text, ForeignKey
 
 
 class CalendarEvent(SQLModel, table=True):
@@ -18,7 +18,7 @@ class CalendarEvent(SQLModel, table=True):
         primary_key=True,
         sa_column_kwargs={"server_default": text("uuid_generate_v4()")}
     )
-    user_id: UUID = Field(foreign_key="users.id", ondelete="CASCADE", index=True)
+    user_id: UUID = Field(sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), index=True))
     title: str = Field(max_length=255)
     description: Optional[str] = Field(default=None)
     start_datetime: datetime = Field(
@@ -30,7 +30,7 @@ class CalendarEvent(SQLModel, table=True):
     location: Optional[str] = Field(max_length=255, default=None)
     event_type: str = Field(max_length=50, default="personal", index=True)
     color: str = Field(max_length=7, default="#3b82f6")
-    metadata: Dict[str, Any] = Field(
+    meta_data: Dict[str, Any] = Field(
         default_factory=lambda: {
             "recurrence": None,
             "attendees": [],
