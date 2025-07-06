@@ -31,7 +31,7 @@ security = HTTPBearer()
 logger = logging.getLogger(__name__)
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: UserCreate,
     request: Request,
@@ -78,7 +78,24 @@ async def register(
         await session.refresh(user)
         
         logger.info(f"User registered: {user.email}")
-        return UserResponse.from_orm(user)
+        
+        # Create tokens for auto-login
+        access_token = create_access_token(data={"sub": str(user.id)})
+        refresh_token = create_refresh_token(data={"sub": str(user.id)})
+        
+        # Save refresh token
+        await save_refresh_token(session, user.id, refresh_token)
+        
+        # Update last login
+        user.last_login_at = datetime.now(timezone.utc)
+        await session.commit()
+        
+        return Token(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer",
+            expires_in=settings.jwt_access_token_expire_minutes * 60
+        )
     
     except HTTPException:
         raise

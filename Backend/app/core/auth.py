@@ -160,8 +160,8 @@ async def get_user_by_email(session: AsyncSession, email: str) -> Optional[User]
         Optional[User]: User object if found, None otherwise
     """
     statement = select(User).where(User.email == email)
-    result = await session.exec(statement)
-    return result.first()
+    result = await session.execute(statement)
+    return result.scalar_one_or_none()
 
 
 async def get_user_by_id(session: AsyncSession, user_id: UUID) -> Optional[User]:
@@ -176,8 +176,8 @@ async def get_user_by_id(session: AsyncSession, user_id: UUID) -> Optional[User]
         Optional[User]: User object if found, None otherwise
     """
     statement = select(User).where(User.id == user_id)
-    result = await session.exec(statement)
-    return result.first()
+    result = await session.execute(statement)
+    return result.scalar_one_or_none()
 
 
 async def authenticate_user(session: AsyncSession, email: str, password: str) -> Optional[User]:
@@ -318,8 +318,8 @@ async def get_user_session(session: AsyncSession, refresh_token: str) -> Optiona
         UserSession.is_active == True,
         UserSession.expires_at > datetime.now(timezone.utc)
     )
-    result = await session.exec(statement)
-    return result.first()
+    result = await session.execute(statement)
+    return result.scalar_one_or_none()
 
 
 async def invalidate_refresh_token(session: AsyncSession, refresh_token: str) -> bool:
@@ -355,9 +355,9 @@ async def invalidate_all_user_sessions(session: AsyncSession, user_id: UUID) -> 
         UserSession.user_id == user_id,
         UserSession.is_active == True
     )
-    result = await session.exec(statement)
+    result = await session.execute(statement)
     
-    for user_session in result.all():
+    for user_session in result.scalars().all():
         user_session.is_active = False
     
     await session.commit()

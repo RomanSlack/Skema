@@ -5,6 +5,7 @@ import logging
 from typing import Any, Dict, Optional, Union
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
@@ -158,7 +159,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content=error_response.dict()
+        content=jsonable_encoder(error_response.dict())
     )
 
 
@@ -189,7 +190,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
     
     return JSONResponse(
         status_code=exc.status_code,
-        content=error_response.dict()
+        content=jsonable_encoder(error_response.dict())
     )
 
 
@@ -224,7 +225,7 @@ async def database_exception_handler(request: Request, exc: SQLAlchemyError) -> 
     
     return JSONResponse(
         status_code=status_code,
-        content=error_response.dict()
+        content=jsonable_encoder(error_response.dict())
     )
 
 
@@ -248,7 +249,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=error_response.dict()
+        content=jsonable_encoder(error_response.dict())
     )
 
 
