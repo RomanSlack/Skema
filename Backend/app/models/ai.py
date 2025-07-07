@@ -34,7 +34,8 @@ class AICommand(SQLModel, table=True):
             "confidence": 0.0,
             "source": "command_bar"
         },
-        sa_column=Column(JSON)
+        sa_column=Column(JSON),
+        alias="metadata"
     )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

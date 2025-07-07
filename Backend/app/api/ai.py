@@ -18,9 +18,10 @@ from app.models.ai import AICommand
 from app.models.user import User
 from app.schemas.ai import (
     AICommandCreate, AICommandResponse, AISuggestionResponse,
-    AICommandFilter, AICommandStats
+    AICommandFilter, AICommandStats, AIConversationRequest, AIConversationResponse
 )
 from app.schemas.common import BaseResponse, PaginatedResponse
+from app.core.ai_conversation import ai_conversation_handler
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -154,7 +155,7 @@ async def execute_ai_command(
             execution_time_ms=execution_time_ms,
             success=success,
             error_message=error_message,
-            metadata=metadata
+            meta_data=metadata
         )
         
         session.add(ai_command)
@@ -437,3 +438,94 @@ async def get_ai_command_stats(
 
 # We need to import asyncio for the sleep function
 import asyncio
+
+
+@router.post("/conversation", response_model=AIConversationResponse)
+async def ai_conversation(
+    request: AIConversationRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Process AI conversation with natural language understanding and tool calling.
+    
+    Args:
+        request: AI conversation request
+        current_user: Current authenticated user
+        session: Database session
+        
+    Returns:
+        AIConversationResponse: AI conversation response
+    """
+    try:
+        start_time = time.time()
+        
+        # Process the conversation
+        result = await ai_conversation_handler.process_message(
+            request.message,
+            current_user,
+            session,
+            request.conversation_history
+        )
+        
+        execution_time_ms = int((time.time() - start_time) * 1000)
+        
+        # Save conversation to database
+        ai_command = AICommand(
+            user_id=current_user.id,
+            command=request.message,
+            response=result.get("response"),
+            context_type="conversation",
+            context_id=None,
+            execution_time_ms=execution_time_ms,
+            success=result.get("success", False),
+            error_message=result.get("error"),
+            meta_data=result.get("metadata", {})
+        )
+        
+        session.add(ai_command)
+        await session.commit()
+        await session.refresh(ai_command)
+        
+        logger.info(f"AI conversation processed for {current_user.email}: {request.message[:50]}...")
+        
+        return AIConversationResponse(
+            response=result.get("response", ""),
+            tool_calls=result.get("tool_calls", []),
+            success=result.get("success", False),
+            error=result.get("error"),
+            metadata=result.get("metadata", {}),
+            execution_time_ms=execution_time_ms
+        )
+        
+    except Exception as e:
+        logger.error(f"AI conversation error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to process AI conversation"
+        )
+
+
+@router.get("/suggestions/quick", response_model=List[str])
+async def get_quick_suggestions(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get quick suggestion prompts for the AI conversation.
+    
+    Args:
+        current_user: Current authenticated user
+        
+    Returns:
+        List[str]: Quick suggestion prompts
+    """
+    try:
+        suggestions = await ai_conversation_handler.get_quick_suggestions(current_user)
+        return suggestions
+        
+    except Exception as e:
+        logger.error(f"Get quick suggestions error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get quick suggestions"
+        )

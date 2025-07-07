@@ -94,3 +94,41 @@ class AICommandStats(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class AIConversationRequest(BaseModel):
+    """Schema for AI conversation request"""
+    
+    message: str = Field(description="User message for AI conversation")
+    conversation_history: Optional[List[Dict[str, Any]]] = Field(
+        default=None, 
+        description="Previous conversation messages for context"
+    )
+    
+    @validator('message')
+    def validate_message(cls, v):
+        if len(v.strip()) < 1:
+            raise ValueError('Message cannot be empty')
+        if len(v) > 2000:
+            raise ValueError('Message must be less than 2000 characters')
+        return v.strip()
+
+
+class AIConversationResponse(BaseModel):
+    """Schema for AI conversation response"""
+    
+    response: str = Field(description="AI assistant response")
+    tool_calls: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="List of tool calls made during conversation"
+    )
+    success: bool = Field(description="Whether the conversation was successful")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Conversation metadata (tokens, model info, etc.)"
+    )
+    execution_time_ms: int = Field(description="Conversation processing time in milliseconds")
+    
+    class Config:
+        from_attributes = True
