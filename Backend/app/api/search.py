@@ -15,6 +15,7 @@ from app.database import get_session
 from app.models.board import Board, Card
 from app.models.calendar import CalendarEvent
 from app.models.journal import JournalEntry
+from app.models.quest import Quest
 from app.models.user import User
 from app.schemas.search import (
     SearchQuery, SearchResult, SearchResponse, 
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 @router.get("/", response_model=SearchResponse)
 async def search_content(
     q: str = Query(description="Search query"),
-    type: str = Query(default="all", description="Content type filter"),
+    type: str = Query(default="all", description="Content type filter (all, boards, cards, calendar, journal, quests)"),
     limit: int = Query(default=50, ge=1, le=100, description="Results limit"),
     offset: int = Query(default=0, ge=0, description="Results offset"),
     current_user: User = Depends(get_current_user),
@@ -39,7 +40,7 @@ async def search_content(
     
     Args:
         q: Search query
-        type: Content type filter (all, boards, cards, calendar, journal)
+        type: Content type filter (all, boards, cards, calendar, journal, quests)
         limit: Maximum results to return
         offset: Results offset for pagination
         current_user: Current authenticated user
@@ -84,6 +85,11 @@ async def search_content(
         if type in ['all', 'journal']:
             journal_results = await _search_journal_entries(session, current_user.id, search_term, limit, offset)
             results.extend(journal_results)
+        
+        # Search quests
+        if type in ['all', 'quests']:
+            quest_results = await _search_quests(session, current_user.id, search_term, limit, offset)
+            results.extend(quest_results)
         
         # Sort by relevance score (descending) and then by update time
         results.sort(key=lambda x: (x.relevance_score, x.updated_at.timestamp()), reverse=True)
@@ -172,6 +178,25 @@ async def get_search_suggestions(
             suggestions.append(SearchSuggestion(
                 text=f"#{tag}",
                 type="tag",
+                count=1
+            ))
+        
+        # Get quest content
+        quest_query = select(Quest.content).where(
+            and_(
+                Quest.user_id == current_user.id,
+                func.lower(Quest.content).like(f"%{search_term}%")
+            )
+        ).limit(3)
+        quest_result = await session.exec(quest_query)
+        quest_contents = quest_result.all()
+        
+        for content in quest_contents:
+            # Use first 30 characters as suggestion
+            suggestion_text = content[:30] + ("..." if len(content) > 30 else "")
+            suggestions.append(SearchSuggestion(
+                text=suggestion_text,
+                type="quest",
                 count=1
             ))
         
@@ -388,4 +413,64 @@ async def _search_journal_entries(session: AsyncSession, user_id: UUID, query: s
     
     except Exception as e:
         logger.error(f"Journal search error: {e}")
+        return []
+
+
+async def _search_quests(session: AsyncSession, user_id: UUID, query: str, limit: int, offset: int) -> List[SearchResult]:
+    """Search quests by content."""
+    try:
+        from datetime import date, datetime, timezone
+        
+        search_query = select(Quest).where(
+            and_(
+                Quest.user_id == user_id,
+                func.lower(Quest.content).like(f"%{query.lower()}%")
+            )
+        ).order_by(desc(Quest.created_at))
+        
+        result = await session.exec(search_query)
+        quests = result.all()
+        
+        search_results = []
+        for quest in quests:
+            # Calculate relevance score
+            relevance = 0.0
+            if query.lower() in quest.content.lower():
+                relevance += 2.0
+            
+            # Create description with status and due date
+            status_text = "✅ Completed" if quest.is_complete else "⏳ Pending"
+            due_text = ""
+            if quest.date_due:
+                due_text = f" • Due: {quest.date_due.strftime('%m/%d/%Y')}"
+            if quest.time_due:
+                due_text += f" at {quest.time_due}"
+            
+            description = f"{status_text}{due_text}"
+            
+            # Use created_at as updated_at since Quest model doesn't have updated_at
+            updated_at = quest.created_at or datetime.now(timezone.utc)
+            
+            search_results.append(SearchResult(
+                id=quest.id,
+                type="quest",
+                title=quest.content,
+                description=description,
+                url=f"/dashboard?quest={quest.id}",
+                created_at=quest.created_at or datetime.now(timezone.utc),
+                updated_at=updated_at,
+                metadata={
+                    "is_complete": quest.is_complete,
+                    "date_created": quest.date_created.isoformat() if quest.date_created else None,
+                    "date_due": quest.date_due.isoformat() if quest.date_due else None,
+                    "time_due": quest.time_due,
+                    "order_index": quest.order_index
+                },
+                relevance_score=relevance
+            ))
+        
+        return search_results
+    
+    except Exception as e:
+        logger.error(f"Quest search error: {e}")
         return []

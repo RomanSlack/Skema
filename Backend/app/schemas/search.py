@@ -11,7 +11,7 @@ class SearchQuery(BaseModel):
     """Schema for search query parameters"""
     
     q: str = Field(description="Search query")
-    type: Optional[Literal['all', 'boards', 'cards', 'calendar', 'journal']] = Field(
+    type: Optional[Literal['all', 'boards', 'cards', 'calendar', 'journal', 'quests']] = Field(
         default='all', 
         description="Type of content to search"
     )
@@ -23,7 +23,7 @@ class SearchResult(BaseModel):
     """Schema for individual search result"""
     
     id: UUID = Field(description="Item ID")
-    type: Literal['board', 'card', 'calendar_event', 'journal_entry'] = Field(description="Result type")
+    type: Literal['board', 'card', 'calendar_event', 'journal_entry', 'quest'] = Field(description="Result type")
     title: str = Field(description="Item title")
     description: Optional[str] = Field(description="Item description/content")
     url: str = Field(description="URL to navigate to this item")
