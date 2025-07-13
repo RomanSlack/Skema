@@ -36,7 +36,7 @@ class Settings(BaseSettings):
         default=["http://localhost:3000", "http://localhost:3001"]
     )
     allowed_methods: List[str] = Field(
-        default=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+        default=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
     )
     allowed_headers: List[str] = Field(default=["*"])
     

@@ -142,14 +142,14 @@ async def get_quest_archive(
             day_response = await get_quest_day(quest_date, current_user, session)
             days.append(day_response)
         
-        return QuestArchiveResponse(
-            days=days,
-            date_range={
+        return {
+            "days": days,
+            "date_range": {
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
                 "total_days": len(days)
             }
-        )
+        }
     
     except Exception as e:
         logger.error(f"Error fetching quest archive for user {current_user.id}: {e}")
