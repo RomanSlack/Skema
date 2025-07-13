@@ -11,7 +11,7 @@
 
 A modern productivity platform that unifies task management, calendar scheduling, journaling, and AI-powered assistance into a single, elegant application.
 
-[![Watch Demo](https://img.shields.io/badge/Watch%20Demo-YouTube-red?logo=youtube)](https://www.youtube.com/watch?v=WxA-utyliIw&t=316s)
+[![Watch Demo](https://img.shields.io/badge/Watch%20Demo-YouTube-red?logo=youtube)](https://youtu.be/WxA-utyliIw)
 
 ## Tech Stack
 
