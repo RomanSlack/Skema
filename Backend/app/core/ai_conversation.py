@@ -6,6 +6,8 @@ import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 import openai
+import asyncio
+from collections import defaultdict
 
 from app.config import settings
 from app.models.user import User
@@ -14,11 +16,82 @@ from app.core.ai_tools import get_tools_for_openai, execute_ai_tool, AI_TOOLS_RE
 logger = logging.getLogger(__name__)
 
 
+class ConversationMemory:
+    """In-memory conversation history management with automatic cleanup"""
+    
+    def __init__(self, max_messages_per_user: int = 6, cleanup_interval_minutes: int = 30):
+        self.conversations: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        self.last_activity: Dict[str, datetime] = {}
+        self.max_messages_per_user = max_messages_per_user  # 3 exchanges = 6 messages (user+assistant)
+        self.cleanup_interval_minutes = cleanup_interval_minutes
+        self._cleanup_task = None
+        self._start_cleanup_task()
+    
+    def _start_cleanup_task(self):
+        """Start background cleanup task"""
+        if self._cleanup_task is None or self._cleanup_task.done():
+            self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
+    
+    async def _periodic_cleanup(self):
+        """Periodically clean up old conversations"""
+        while True:
+            try:
+                await asyncio.sleep(self.cleanup_interval_minutes * 60)
+                await self.cleanup_old_conversations()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in conversation cleanup: {e}")
+    
+    async def cleanup_old_conversations(self, max_age_hours: int = 2):
+        """Remove conversations older than max_age_hours"""
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+        users_to_remove = []
+        
+        for user_id, last_activity in self.last_activity.items():
+            if last_activity < cutoff_time:
+                users_to_remove.append(user_id)
+        
+        for user_id in users_to_remove:
+            if user_id in self.conversations:
+                del self.conversations[user_id]
+            del self.last_activity[user_id]
+        
+        if users_to_remove:
+            logger.info(f"Cleaned up {len(users_to_remove)} old conversation sessions")
+    
+    def add_message(self, user_id: str, role: str, content: str, tool_calls: Optional[List[Dict]] = None):
+        """Add a message to user's conversation history"""
+        message = {"role": role, "content": content}
+        if tool_calls:
+            message["tool_calls"] = tool_calls
+        
+        self.conversations[user_id].append(message)
+        self.last_activity[user_id] = datetime.now(timezone.utc)
+        
+        # Keep only the most recent messages (3 exchanges = 6 messages)
+        if len(self.conversations[user_id]) > self.max_messages_per_user:
+            self.conversations[user_id] = self.conversations[user_id][-self.max_messages_per_user:]
+    
+    def get_conversation_history(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get conversation history for a user"""
+        self.last_activity[user_id] = datetime.now(timezone.utc)
+        return self.conversations[user_id].copy()
+    
+    def clear_conversation(self, user_id: str):
+        """Clear conversation history for a user"""
+        if user_id in self.conversations:
+            del self.conversations[user_id]
+        if user_id in self.last_activity:
+            del self.last_activity[user_id]
+
+
 class AIConversationHandler:
-    """Handler for AI conversations with tool calling support"""
+    """Handler for AI conversations with tool calling support and session memory"""
     
     def __init__(self):
         self.client = None
+        self.memory = ConversationMemory()
         if settings.openai_api_key:
             openai.api_key = settings.openai_api_key
             self.client = openai.OpenAI(api_key=settings.openai_api_key)
@@ -203,6 +276,9 @@ Remember: You're not just a tool executor - you're an intelligent assistant that
             }
         
         try:
+            # Import execute_ai_tool at the top to avoid scoping issues
+            from app.core.ai_tools import execute_ai_tool
+            
             # Build conversation messages
             messages = [
                 {"role": "system", "content": self._get_system_prompt(user)}
@@ -212,8 +288,50 @@ Remember: You're not just a tool executor - you're an intelligent assistant that
             if conversation_history:
                 messages.extend(conversation_history[-10:])  # Keep last 10 messages for context
             
-            # Add current user message
-            messages.append({"role": "user", "content": message})
+            # Check if message contains quest-related keywords and auto-inject quest context
+            quest_keywords = [
+                'quest', 'quests', 'task', 'tasks', 'todo', 'todos', 'to-do', 'to-dos',
+                'complete', 'completed', 'finish', 'finished', 'done', 'did',
+                'homework', 'work', 'assignment', 'project', 'chore', 'errand'
+            ]
+            
+            message_lower = message.lower()
+            has_quest_context = any(keyword in message_lower for keyword in quest_keywords)
+            
+            # Auto-inject quest context if quest-related words detected
+            enhanced_message = message
+            if has_quest_context:
+                try:
+                    # Get today's quests automatically
+                    quest_result = await execute_ai_tool("get_quests", {}, user, session)
+                    
+                    if quest_result.get("success"):
+                        quest_list = quest_result.get("quests", [])
+                        
+                        if quest_list:
+                            quest_context = "\n\n**CURRENT QUEST CONTEXT (automatically provided):**\n"
+                            quest_context += f"Today's Quests ({len(quest_list)} total):\n"
+                            
+                            for i, quest in enumerate(quest_list, 1):
+                                status = "✅ COMPLETED" if quest.get("is_complete") else "⏳ PENDING"
+                                time_info = ""
+                                if quest.get("time_due"):
+                                    time_info = f" (due: {quest.get('time_due')})"
+                                quest_context += f"{i}. [{status}] {quest.get('content', '')}{time_info}\n"
+                            
+                            quest_context += f"\nCompleted: {sum(1 for q in quest_list if q.get('is_complete'))}/{len(quest_list)}\n"
+                            quest_context += "This context is provided automatically since you mentioned quest-related keywords.\n"
+                            
+                            enhanced_message = message + quest_context
+                        else:
+                            enhanced_message = message + "\n\n**QUEST CONTEXT**: No quests found for today."
+                    else:
+                        logger.warning(f"Failed to auto-fetch quest context: {quest_result.get('error')}")
+                except Exception as e:
+                    logger.warning(f"Error auto-injecting quest context: {e}")
+            
+            # Add current user message (potentially enhanced with quest context)
+            messages.append({"role": "user", "content": enhanced_message})
             
             # Get available tools
             tools = get_tools_for_openai()
