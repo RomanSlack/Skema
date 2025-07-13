@@ -7,6 +7,7 @@ from .calendar import CalendarEvent
 from .journal import JournalEntry
 from .ai import AICommand
 from .audit import AuditLog
+from .quest import Quest
 
 __all__ = [
     "User",
@@ -16,5 +17,6 @@ __all__ = [
     "CalendarEvent",
     "JournalEntry",
     "AICommand",
-    "AuditLog"
+    "AuditLog",
+    "Quest"
 ]

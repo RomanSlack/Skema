@@ -436,13 +436,295 @@ class GetBoardsTool(AITool):
             }
 
 
+class CreateQuestTool(AITool):
+    """Tool for creating quest tasks"""
+    
+    name: str = "create_quest"
+    description: str = "Create a new quest (daily task) with content and optional due date/time"
+    parameters: Dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "content": {
+                "type": "string",
+                "description": "The quest task content or description"
+            },
+            "date_created": {
+                "type": "string",
+                "format": "date",
+                "description": "Date for the quest (YYYY-MM-DD format), defaults to today"
+            },
+            "date_due": {
+                "type": "string",
+                "format": "date", 
+                "description": "Due date for the quest (YYYY-MM-DD format)"
+            },
+            "time_due": {
+                "type": "string",
+                "pattern": "^([01]?[0-9]|2[0-3]):[0-5][0-9]$",
+                "description": "Due time in HH:MM format"
+            }
+        },
+        "required": ["content"]
+    }
+    
+    async def execute(self, parameters: Dict[str, Any], user: User, session) -> Dict[str, Any]:
+        try:
+            from app.models.quest import Quest
+            from datetime import date, datetime, timezone
+            from sqlmodel import select, func, and_
+            
+            content = parameters.get("content")
+            date_created = parameters.get("date_created")
+            date_due = parameters.get("date_due")
+            time_due = parameters.get("time_due")
+            
+            # Parse dates
+            if date_created:
+                quest_date = datetime.strptime(date_created, "%Y-%m-%d").date()
+            else:
+                quest_date = date.today()
+                
+            due_date = None
+            if date_due:
+                due_date = datetime.strptime(date_due, "%Y-%m-%d").date()
+            
+            # Get next order index
+            max_order_stmt = select(func.coalesce(func.max(Quest.order_index), 0)).where(
+                and_(Quest.user_id == user.id, Quest.date_created == quest_date)
+            )
+            result = await session.execute(max_order_stmt)
+            max_order = result.scalar() or 0
+            
+            # Create quest
+            quest = Quest(
+                user_id=user.id,
+                content=content,
+                date_created=quest_date,
+                date_due=due_date,
+                time_due=time_due,
+                order_index=max_order + 1
+            )
+            
+            session.add(quest)
+            await session.commit()
+            await session.refresh(quest)
+            
+            logger.info(f"Quest created via AI: {quest.id} for user {user.id}")
+            
+            return {
+                "success": True,
+                "quest": {
+                    "id": str(quest.id),
+                    "content": quest.content,
+                    "date_created": quest.date_created.isoformat(),
+                    "date_due": quest.date_due.isoformat() if quest.date_due else None,
+                    "time_due": quest.time_due,
+                    "is_complete": quest.is_complete
+                },
+                "message": f"Quest created for {quest_date}: {content}"
+            }
+            
+        except Exception as e:
+            await session.rollback()
+            logger.error(f"Error creating quest via AI: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to create quest"
+            }
+
+
+class CompleteQuestTool(AITool):
+    """Tool for completing/marking quest tasks as done"""
+    
+    name: str = "complete_quest"
+    description: str = "Mark a quest task as complete or incomplete"
+    parameters: Dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "quest_content": {
+                "type": "string", 
+                "description": "Content of the quest to mark as complete (partial match)"
+            },
+            "quest_date": {
+                "type": "string",
+                "format": "date",
+                "description": "Date of the quest (YYYY-MM-DD format), defaults to today"
+            },
+            "is_complete": {
+                "type": "boolean",
+                "description": "Whether to mark as complete (true) or incomplete (false)"
+            }
+        },
+        "required": ["quest_content"]
+    }
+    
+    async def execute(self, parameters: Dict[str, Any], user: User, session) -> Dict[str, Any]:
+        try:
+            from app.models.quest import Quest
+            from datetime import date, datetime, timezone
+            from sqlmodel import select, and_
+            
+            quest_content = parameters.get("quest_content")
+            quest_date_str = parameters.get("quest_date")
+            is_complete = parameters.get("is_complete", True)
+            
+            # Parse date
+            if quest_date_str:
+                quest_date = datetime.strptime(quest_date_str, "%Y-%m-%d").date()
+            else:
+                quest_date = date.today()
+            
+            # Find quest by content (fuzzy match)
+            statement = select(Quest).where(
+                and_(
+                    Quest.user_id == user.id,
+                    Quest.date_created == quest_date,
+                    Quest.content.ilike(f"%{quest_content}%")
+                )
+            ).order_by(Quest.order_index)
+            
+            result = await session.execute(statement)
+            quests = result.scalars().all()
+            
+            if not quests:
+                return {
+                    "success": False,
+                    "message": f"No quest found matching '{quest_content}' for {quest_date}"
+                }
+            
+            # Use the first match
+            quest = quests[0]
+            
+            if is_complete:
+                quest.mark_complete()
+            else:
+                quest.mark_incomplete()
+            
+            await session.commit()
+            
+            status = "completed" if is_complete else "marked as incomplete"
+            logger.info(f"Quest {status} via AI: {quest.id} for user {user.id}")
+            
+            return {
+                "success": True,
+                "quest": {
+                    "id": str(quest.id),
+                    "content": quest.content,
+                    "is_complete": quest.is_complete,
+                    "completed_at": quest.completed_at.isoformat() if quest.completed_at else None
+                },
+                "message": f"Quest '{quest.content}' {status}"
+            }
+            
+        except Exception as e:
+            await session.rollback()
+            logger.error(f"Error completing quest via AI: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to update quest"
+            }
+
+
+class GetQuestsTool(AITool):
+    """Tool for getting quest tasks for a specific date"""
+    
+    name: str = "get_quests"
+    description: str = "Get quest tasks for a specific date or today"
+    parameters: Dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "quest_date": {
+                "type": "string",
+                "format": "date",
+                "description": "Date to get quests for (YYYY-MM-DD format), defaults to today"
+            },
+            "include_completed": {
+                "type": "boolean",
+                "description": "Whether to include completed quests (default: true)"
+            }
+        },
+        "required": []
+    }
+    
+    async def execute(self, parameters: Dict[str, Any], user: User, session) -> Dict[str, Any]:
+        try:
+            from app.models.quest import Quest
+            from datetime import date, datetime
+            from sqlmodel import select, and_
+            
+            quest_date_str = parameters.get("quest_date")
+            include_completed = parameters.get("include_completed", True)
+            
+            # Parse date
+            if quest_date_str:
+                quest_date = datetime.strptime(quest_date_str, "%Y-%m-%d").date()
+            else:
+                quest_date = date.today()
+            
+            # Build query
+            conditions = [
+                Quest.user_id == user.id,
+                Quest.date_created == quest_date
+            ]
+            
+            if not include_completed:
+                conditions.append(Quest.is_complete == False)
+            
+            statement = select(Quest).where(and_(*conditions)).order_by(Quest.order_index)
+            result = await session.execute(statement)
+            quests = result.scalars().all()
+            
+            # Format quests
+            quests_list = []
+            completed_count = 0
+            for quest in quests:
+                if quest.is_complete:
+                    completed_count += 1
+                    
+                quests_list.append({
+                    "id": str(quest.id),
+                    "content": quest.content,
+                    "is_complete": quest.is_complete,
+                    "date_due": quest.date_due.isoformat() if quest.date_due else None,
+                    "time_due": quest.time_due,
+                    "order_index": quest.order_index
+                })
+            
+            logger.info(f"Retrieved {len(quests)} quests for {quest_date} via AI for user {user.id}")
+            
+            return {
+                "success": True,
+                "quests": quests_list,
+                "summary": {
+                    "date": quest_date.isoformat(),
+                    "total": len(quests_list),
+                    "completed": completed_count,
+                    "pending": len(quests_list) - completed_count
+                },
+                "message": f"Found {len(quests_list)} quests for {quest_date}"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting quests via AI: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to get quests"
+            }
+
+
 # Registry of available tools
 AI_TOOLS_REGISTRY: Dict[str, AITool] = {
     "create_journal_entry": CreateJournalEntryTool(),
     "create_calendar_event": CreateCalendarEventTool(),
     "create_board": CreateBoardTool(),
     "create_card": CreateCardTool(),
-    "get_boards": GetBoardsTool()
+    "get_boards": GetBoardsTool(),
+    "create_quest": CreateQuestTool(),
+    "complete_quest": CompleteQuestTool(),
+    "get_quests": GetQuestsTool()
 }
 
 

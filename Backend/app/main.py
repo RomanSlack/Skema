@@ -26,7 +26,7 @@ from app.schemas.common import HealthResponse
 from app.websocket import manager, handle_websocket_message
 
 # API routers
-from app.api import auth, boards, calendar, journal, ai, search
+from app.api import auth, boards, calendar, journal, ai, search, quest
 
 # Setup logging
 setup_logging()
@@ -104,6 +104,7 @@ app.include_router(calendar.router, prefix="/api/calendar", tags=["Calendar"])
 app.include_router(journal.router, prefix="/api/journal", tags=["Journal"])
 app.include_router(ai.router, prefix="/api/ai", tags=["AI"])
 app.include_router(search.router, prefix="/api/search", tags=["Search"])
+app.include_router(quest.router, prefix="/api/quest", tags=["Quest"])
 
 
 @app.get("/health", response_model=HealthResponse)

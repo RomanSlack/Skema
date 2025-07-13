@@ -69,8 +69,23 @@ You have access to these tools - USE THEM when users request actions:
 
 5. **get_boards** - List user's existing boards to get board IDs
 
+6. **create_quest** - For creating daily tasks (rolling to-do system)
+   - Required: content
+   - Optional: date_created, date_due, time_due
+   - Examples: "buy groceries", "finish report by 5pm", "call mom tomorrow"
+
+7. **complete_quest** - For marking quest tasks as complete/incomplete
+   - Required: quest_content (partial match)
+   - Optional: quest_date, is_complete
+   - Examples: "mark groceries as done", "complete the report task"
+
+8. **get_quests** - Get quest tasks for a specific date
+   - Optional: quest_date, include_completed
+   - Examples: "show my tasks for today", "what's on my quest list"
+
 IMPORTANT INSTRUCTIONS:
-- ALWAYS use tools when users request creating/scheduling something
+- ALWAYS use tools when users request creating/scheduling/managing something
+- For daily tasks/todos, use Quest tools instead of cards/boards
 - ALWAYS convert dates/times to ISO format using current date context above
 
 DATE & TIME CONVERSION RULES:
