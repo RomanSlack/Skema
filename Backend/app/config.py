@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     ai_model: str = Field(default="gpt-4-turbo-preview", env="AI_MODEL")
     ai_max_tokens: int = Field(default=4000, env="AI_MAX_TOKENS")
     
+    # Search Configuration (optional)
+    serper_api_key: Optional[str] = Field(default=None, env="SERPER_API_KEY")
+    
     # Security
     bcrypt_rounds: int = Field(default=12, env="BCRYPT_ROUNDS")
     session_cookie_secure: bool = Field(default=False, env="SESSION_COOKIE_SECURE")

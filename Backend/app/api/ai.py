@@ -3,13 +3,16 @@ AI command endpoints
 """
 import logging
 import time
+import tempfile
+import os
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, and_, desc, func
+import openai
 
 from app.config import settings
 from app.core.auth import get_current_user
@@ -528,4 +531,73 @@ async def get_quick_suggestions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to get quick suggestions"
+        )
+
+
+@router.post("/transcribe", response_model=dict)
+async def transcribe_audio(
+    audio_file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Transcribe audio file using OpenAI Whisper API.
+    
+    Args:
+        audio_file: Audio file to transcribe
+        current_user: Current authenticated user
+        
+    Returns:
+        dict: Transcription result with text
+    """
+    try:
+        start_time = time.time()
+        
+        # Validate file type
+        if not audio_file.content_type or not audio_file.content_type.startswith('audio/'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File must be an audio file"
+            )
+        
+        # Create temporary file to store audio
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as temp_file:
+            # Read and write audio content
+            content = await audio_file.read()
+            temp_file.write(content)
+            temp_file_path = temp_file.name
+        
+        try:
+            # Initialize OpenAI client
+            client = openai.OpenAI(api_key=settings.openai_api_key)
+            
+            # Transcribe using Whisper
+            with open(temp_file_path, 'rb') as audio_file_handle:
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file_handle,
+                    response_format="text"
+                )
+            
+            execution_time_ms = int((time.time() - start_time) * 1000)
+            
+            logger.info(f"Audio transcribed for {current_user.email} in {execution_time_ms}ms")
+            
+            return {
+                "transcript": transcript.strip(),
+                "execution_time_ms": execution_time_ms,
+                "success": True
+            }
+            
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Audio transcription error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to transcribe audio"
         )

@@ -715,6 +715,114 @@ class GetQuestsTool(AITool):
             }
 
 
+class InternetSearchTool(AITool):
+    """Tool for searching the internet using Serper API"""
+    
+    name: str = "search_internet"
+    description: str = "Search the internet for current information, news, facts, or answers to questions"
+    parameters: Dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "The search query to find information on the internet"
+            },
+            "num_results": {
+                "type": "integer",
+                "description": "Number of search results to return (default: 5, max: 10)",
+                "default": 5,
+                "minimum": 1,
+                "maximum": 10
+            }
+        },
+        "required": ["query"]
+    }
+    
+    async def execute(self, parameters: Dict[str, Any], user: User, session) -> Dict[str, Any]:
+        """Execute internet search using Serper API"""
+        try:
+            if not settings.serper_api_key:
+                return {
+                    "success": False,
+                    "error": "Internet search not available - Serper API key not configured",
+                    "message": "Internet search functionality is not configured"
+                }
+            
+            import httpx
+            
+            query = parameters.get("query")
+            num_results = min(parameters.get("num_results", 5), 10)
+            
+            # Prepare Serper API request
+            url = "https://google.serper.dev/search"
+            headers = {
+                'X-API-KEY': settings.serper_api_key,
+                'Content-Type': 'application/json'
+            }
+            payload = {
+                "q": query,
+                "num": num_results
+            }
+            
+            # Make the API request
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=payload, headers=headers)
+                response.raise_for_status()
+                results = response.json()
+            
+            # Extract organic search results
+            organic_results = results.get("organic", [])
+            
+            # Format results for the AI
+            search_results = []
+            for result in organic_results[:num_results]:
+                search_results.append({
+                    "title": result.get("title", ""),
+                    "link": result.get("link", ""),
+                    "snippet": result.get("snippet", ""),
+                    "position": result.get("position", 0)
+                })
+            
+            # Also include answer box and knowledge graph if available
+            answer_box = results.get("answerBox")
+            knowledge_graph = results.get("knowledgeGraph")
+            
+            return {
+                "success": True,
+                "result": {
+                    "query": query,
+                    "search_results": search_results,
+                    "answer_box": answer_box,
+                    "knowledge_graph": knowledge_graph,
+                    "results_count": len(search_results),
+                    "search_time": results.get("searchInformation", {}).get("searchTime")
+                },
+                "message": f"Found {len(search_results)} search results for '{query}'"
+            }
+            
+        except httpx.RequestError as e:
+            logger.error(f"Network error in internet search: {e}")
+            return {
+                "success": False,
+                "error": f"Network error: {str(e)}",
+                "message": "Failed to connect to search service"
+            }
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error in internet search: {e}")
+            return {
+                "success": False,
+                "error": f"Search API error: {e.response.status_code}",
+                "message": "Search service returned an error"
+            }
+        except Exception as e:
+            logger.error(f"Error in internet search: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to perform internet search"
+            }
+
+
 # Registry of available tools
 AI_TOOLS_REGISTRY: Dict[str, AITool] = {
     "create_journal_entry": CreateJournalEntryTool(),
@@ -724,7 +832,8 @@ AI_TOOLS_REGISTRY: Dict[str, AITool] = {
     "get_boards": GetBoardsTool(),
     "create_quest": CreateQuestTool(),
     "complete_quest": CompleteQuestTool(),
-    "get_quests": GetQuestsTool()
+    "get_quests": GetQuestsTool(),
+    "search_internet": InternetSearchTool()
 }
 
 
