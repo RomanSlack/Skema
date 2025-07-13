@@ -361,3 +361,118 @@ async def invalidate_all_user_sessions(session: AsyncSession, user_id: UUID) -> 
         user_session.is_active = False
     
     await session.commit()
+
+
+async def clear_user_account_data(session: AsyncSession, user_id: UUID) -> Dict[str, int]:
+    """
+    Clear all user account data while preserving the user account itself.
+    
+    This function deletes:
+    - All boards and their cards
+    - All calendar events  
+    - All journal entries
+    - All AI command history
+    - All user sessions (logout all devices)
+    
+    Args:
+        session: Database session
+        user_id: User ID whose data should be cleared
+        
+    Returns:
+        Dict[str, int]: Count of deleted items per category
+    """
+    from app.models.board import Board, Card
+    from app.models.calendar import CalendarEvent  
+    from app.models.journal import JournalEntry
+    from app.models.ai import AICommand
+    
+    counts = {
+        "boards": 0,
+        "cards": 0, 
+        "calendar_events": 0,
+        "journal_entries": 0,
+        "ai_commands": 0,
+        "user_sessions": 0
+    }
+    
+    try:
+        # Delete all user sessions (logout from all devices)
+        sessions_stmt = select(UserSession).where(UserSession.user_id == user_id)
+        sessions_result = await session.execute(sessions_stmt)
+        user_sessions = sessions_result.scalars().all()
+        counts["user_sessions"] = len(user_sessions)
+        
+        for user_session in user_sessions:
+            await session.delete(user_session)
+        
+        # Delete all AI commands
+        ai_stmt = select(AICommand).where(AICommand.user_id == user_id)
+        ai_result = await session.execute(ai_stmt)
+        ai_commands = ai_result.scalars().all()
+        counts["ai_commands"] = len(ai_commands)
+        
+        for ai_command in ai_commands:
+            await session.delete(ai_command)
+        
+        # Delete all journal entries
+        journal_stmt = select(JournalEntry).where(JournalEntry.user_id == user_id)
+        journal_result = await session.execute(journal_stmt)
+        journal_entries = journal_result.scalars().all()
+        counts["journal_entries"] = len(journal_entries)
+        
+        for journal_entry in journal_entries:
+            await session.delete(journal_entry)
+        
+        # Delete all calendar events
+        calendar_stmt = select(CalendarEvent).where(CalendarEvent.user_id == user_id)
+        calendar_result = await session.execute(calendar_stmt)
+        calendar_events = calendar_result.scalars().all()
+        counts["calendar_events"] = len(calendar_events)
+        
+        for calendar_event in calendar_events:
+            await session.delete(calendar_event)
+        
+        # Delete all cards first (foreign key constraint)
+        cards_stmt = select(Card).join(Board).where(Board.user_id == user_id)
+        cards_result = await session.execute(cards_stmt)
+        cards = cards_result.scalars().all()
+        counts["cards"] = len(cards)
+        
+        for card in cards:
+            await session.delete(card)
+        
+        # Delete all boards
+        boards_stmt = select(Board).where(Board.user_id == user_id)
+        boards_result = await session.execute(boards_stmt)
+        boards = boards_result.scalars().all()
+        counts["boards"] = len(boards)
+        
+        for board in boards:
+            await session.delete(board)
+        
+        # Reset user preferences to default
+        user = await get_user_by_id(session, user_id)
+        if user:
+            user.preferences = {
+                "theme": "light",
+                "notifications": {
+                    "email": True,
+                    "push": True,
+                    "board_updates": True,
+                    "calendar_reminders": True
+                },
+                "dashboard": {
+                    "layout": "default",
+                    "widgets": ["boards", "calendar", "journal", "recent_activity"]
+                }
+            }
+            user.updated_at = datetime.now(timezone.utc)
+            session.add(user)
+        
+        await session.commit()
+        
+        return counts
+        
+    except Exception as e:
+        await session.rollback()
+        raise e

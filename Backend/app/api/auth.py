@@ -16,13 +16,13 @@ from app.core.auth import (
     authenticate_user, create_access_token, create_refresh_token,
     get_current_user, get_password_hash, get_user_by_email,
     get_user_session, invalidate_all_user_sessions, invalidate_refresh_token,
-    save_refresh_token, verify_token
+    save_refresh_token, verify_token, verify_password, clear_user_account_data
 )
 from app.database import get_session
 from app.models.user import User
 from app.schemas.auth import (
     UserCreate, UserLogin, UserResponse, Token, RefreshToken,
-    PasswordChange, UserUpdate
+    PasswordChange, UserUpdate, ClearAccountData, ClearAccountDataResponse
 )
 from app.schemas.common import BaseResponse, ErrorResponse
 
@@ -418,4 +418,59 @@ async def change_password(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Password change failed"
+        )
+
+
+@router.post("/clear-account-data", response_model=ClearAccountDataResponse)
+async def clear_account_data(
+    clear_data: ClearAccountData,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Clear all user account data (boards, calendar, journal, AI history).
+    
+    This endpoint permanently deletes all user data except the account itself.
+    Requires password verification and specific confirmation text.
+    
+    Args:
+        clear_data: Clear account data request with password and confirmation
+        current_user: Current authenticated user
+        session: Database session
+        
+    Returns:
+        ClearAccountDataResponse: Result of the clear operation
+        
+    Raises:
+        HTTPException: If password is incorrect or operation fails
+    """
+    try:
+        # Verify password
+        if not verify_password(clear_data.password, current_user.hashed_password):
+            logger.warning(f"Failed account data clear attempt - wrong password: {current_user.email}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Current password is incorrect"
+            )
+        
+        # Clear all user data
+        logger.info(f"Starting account data clear for user: {current_user.email}")
+        cleared_counts = await clear_user_account_data(session, current_user.id)
+        
+        logger.info(f"Account data cleared successfully for user: {current_user.email}. Counts: {cleared_counts}")
+        
+        return ClearAccountDataResponse(
+            success=True,
+            message="Account data cleared successfully. You have been logged out of all devices.",
+            cleared_counts=cleared_counts,
+            timestamp=datetime.now(timezone.utc)
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Account data clear error for user {current_user.email}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to clear account data"
         )

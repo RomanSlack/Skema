@@ -130,3 +130,26 @@ class PasswordChange(BaseModel):
         if not any(c.isdigit() for c in v):
             raise ValueError('Password must contain at least one digit')
         return v
+
+
+class ClearAccountData(BaseModel):
+    """Schema for clearing account data"""
+    
+    password: str = Field(description="Current password for verification")
+    confirmation_text: str = Field(description="Confirmation text that must match exactly")
+    
+    @validator('confirmation_text')
+    def validate_confirmation(cls, v):
+        expected = "DELETE MY DATA"
+        if v != expected:
+            raise ValueError(f'Confirmation text must be exactly: {expected}')
+        return v
+
+
+class ClearAccountDataResponse(BaseModel):
+    """Schema for clear account data response"""
+    
+    success: bool = Field(description="Whether the operation was successful")
+    message: str = Field(description="Response message")
+    cleared_counts: Dict[str, int] = Field(description="Count of cleared items per category")
+    timestamp: datetime = Field(description="When the operation was performed")
