@@ -19,10 +19,10 @@ logger = logging.getLogger(__name__)
 class ConversationMemory:
     """In-memory conversation history management with automatic cleanup"""
     
-    def __init__(self, max_messages_per_user: int = 6, cleanup_interval_minutes: int = 30):
+    def __init__(self, max_messages_per_user: int = 15, cleanup_interval_minutes: int = 30):
         self.conversations: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         self.last_activity: Dict[str, datetime] = {}
-        self.max_messages_per_user = max_messages_per_user  # 3 exchanges = 6 messages (user+assistant)
+        self.max_messages_per_user = max_messages_per_user  # 3 exchanges with tools = ~15 messages (user+assistant+tools)
         self.cleanup_interval_minutes = cleanup_interval_minutes
         self._cleanup_task = None
         self._start_cleanup_task()
@@ -69,9 +69,46 @@ class ConversationMemory:
         self.conversations[user_id].append(message)
         self.last_activity[user_id] = datetime.now(timezone.utc)
         
-        # Keep only the most recent messages (3 exchanges = 6 messages)
-        if len(self.conversations[user_id]) > self.max_messages_per_user:
-            self.conversations[user_id] = self.conversations[user_id][-self.max_messages_per_user:]
+        # Keep only the most recent messages, but ensure we don't break tool_call pairs
+        self._trim_conversation(user_id)
+    
+    def add_tool_result(self, user_id: str, tool_call_id: str, result: Dict[str, Any]):
+        """Add a tool result message to user's conversation history"""
+        message = {
+            "role": "tool",
+            "tool_call_id": tool_call_id,
+            "content": json.dumps(result)
+        }
+        
+        self.conversations[user_id].append(message)
+        self.last_activity[user_id] = datetime.now(timezone.utc)
+        
+        # Keep only the most recent messages, but ensure we don't break tool_call pairs
+        self._trim_conversation(user_id)
+    
+    def _trim_conversation(self, user_id: str):
+        """Trim conversation while preserving tool_call/tool message pairs"""
+        messages = self.conversations[user_id]
+        
+        # If we're over the limit, trim from the beginning
+        while len(messages) > self.max_messages_per_user:
+            # Find the first complete conversation unit to remove
+            # A unit could be: user -> assistant -> tool(s), or just user -> assistant
+            if len(messages) >= 2:
+                # Remove the first message
+                first_msg = messages.pop(0)
+                
+                # If it was an assistant message with tool_calls, also remove corresponding tool messages
+                if first_msg.get("role") == "assistant" and first_msg.get("tool_calls"):
+                    tool_call_ids = {tc["id"] for tc in first_msg["tool_calls"]}
+                    
+                    # Remove corresponding tool messages
+                    while (messages and 
+                           messages[0].get("role") == "tool" and 
+                           messages[0].get("tool_call_id") in tool_call_ids):
+                        messages.pop(0)
+            else:
+                break
     
     def get_conversation_history(self, user_id: str) -> List[Dict[str, Any]]:
         """Get conversation history for a user"""
@@ -275,18 +312,25 @@ Remember: You're not just a tool executor - you're an intelligent assistant that
                 "error": "OpenAI API key not configured"
             }
         
+        user_id = str(user.id)
+        
         try:
             # Import execute_ai_tool at the top to avoid scoping issues
             from app.core.ai_tools import execute_ai_tool
             
-            # Build conversation messages
+            # Build conversation messages with system prompt
             messages = [
                 {"role": "system", "content": self._get_system_prompt(user)}
             ]
             
-            # Add conversation history if provided
+            # Add stored conversation history (3 prior exchanges)
+            stored_history = self.memory.get_conversation_history(user_id)
+            if stored_history:
+                messages.extend(stored_history)
+            
+            # Add any additional conversation history from the request (for compatibility)
             if conversation_history:
-                messages.extend(conversation_history[-10:])  # Keep last 10 messages for context
+                messages.extend(conversation_history[-6:])  # Limit to prevent token overflow
             
             # Check if message contains quest-related keywords and auto-inject quest context
             quest_keywords = [
@@ -396,6 +440,30 @@ Remember: You're not just a tool executor - you're an intelligent assistant that
             else:
                 response_text = assistant_message.content
             
+            # Store conversation in memory for future context
+            # Add user message
+            self.memory.add_message(user_id, "user", enhanced_message)
+            
+            # Add assistant response with tool calls if any
+            assistant_tool_calls = None
+            if assistant_message.tool_calls:
+                assistant_tool_calls = [{
+                    "id": tool_call.id,
+                    "type": "function",
+                    "function": {
+                        "name": tool_call.function.name,
+                        "arguments": tool_call.function.arguments
+                    }
+                } for tool_call in assistant_message.tool_calls]
+            
+            self.memory.add_message(user_id, "assistant", response_text, assistant_tool_calls)
+            
+            # Add tool results to memory if there were tool calls
+            if assistant_message.tool_calls:
+                for i, tool_call in enumerate(assistant_message.tool_calls):
+                    if i < len(tool_results):
+                        self.memory.add_tool_result(user_id, tool_call.id, tool_results[i]["result"])
+            
             # Calculate token usage
             total_tokens = response.usage.total_tokens if hasattr(response, 'usage') else 0
             
@@ -407,7 +475,8 @@ Remember: You're not just a tool executor - you're an intelligent assistant that
                     "model": settings.ai_model,
                     "tokens_used": total_tokens,
                     "tools_used": len(tool_results),
-                    "message_count": len(messages)
+                    "message_count": len(messages),
+                    "conversation_length": len(self.memory.get_conversation_history(user_id))
                 }
             }
             
@@ -419,11 +488,27 @@ Remember: You're not just a tool executor - you're an intelligent assistant that
                 "error": str(e)
             }
     
+    def clear_user_conversation(self, user: User):
+        """Clear conversation history for a specific user"""
+        user_id = str(user.id)
+        self.memory.clear_conversation(user_id)
+        logger.info(f"Cleared conversation history for user {user_id}")
+    
+    def get_conversation_stats(self, user: User) -> Dict[str, Any]:
+        """Get conversation statistics for a user"""
+        user_id = str(user.id)
+        history = self.memory.get_conversation_history(user_id)
+        return {
+            "message_count": len(history),
+            "last_activity": self.memory.last_activity.get(user_id),
+            "has_context": len(history) > 0
+        }
+    
     async def get_quick_suggestions(self, user: User) -> List[str]:
         """Get quick suggestion prompts for the user"""
         return [
             "Add a journal entry about how I'm feeling today",
-            "Schedule a meeting for tomorrow at 2 PM",
+            "Schedule a meeting for tomorrow at 2 PM", 
             "Create a board for my new project",
             "Show me all my boards",
             "Add a card to track my progress",

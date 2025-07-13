@@ -509,6 +509,65 @@ async def ai_conversation(
         )
 
 
+@router.delete("/conversation/clear", response_model=BaseResponse)
+async def clear_conversation_history(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Clear conversation history for the current user.
+    
+    Args:
+        current_user: Current authenticated user
+        
+    Returns:
+        BaseResponse: Success response
+    """
+    try:
+        ai_conversation_handler.clear_user_conversation(current_user)
+        
+        return BaseResponse(
+            success=True,
+            message="Conversation history cleared successfully"
+        )
+        
+    except Exception as e:
+        logger.error(f"Clear conversation history error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to clear conversation history"
+        )
+
+
+@router.get("/conversation/stats", response_model=dict)
+async def get_conversation_stats(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get conversation statistics for the current user.
+    
+    Args:
+        current_user: Current authenticated user
+        
+    Returns:
+        dict: Conversation statistics
+    """
+    try:
+        stats = ai_conversation_handler.get_conversation_stats(current_user)
+        
+        return {
+            "success": True,
+            "data": stats,
+            "message": "Conversation statistics retrieved successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Get conversation stats error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get conversation statistics"
+        )
+
+
 @router.get("/suggestions/quick", response_model=List[str])
 async def get_quick_suggestions(
     current_user: User = Depends(get_current_user)
