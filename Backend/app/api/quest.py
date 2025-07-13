@@ -50,7 +50,7 @@ async def get_quest_day(
                 Quest.user_id == current_user.id,
                 Quest.date_created == quest_date
             )
-        ).order_by(Quest.order_index, Quest.created_at)
+        ).order_by(Quest.is_complete.asc(), Quest.created_at.desc())
         
         result = await session.execute(statement)
         quests = result.scalars().all()

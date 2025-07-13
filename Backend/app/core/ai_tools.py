@@ -198,7 +198,10 @@ class CreateCalendarEventTool(AITool):
             from app.schemas.calendar import CalendarEventResponse
             
             # Parse dates
+            logger.info(f"AI Calendar Tool - Raw start_datetime parameter: {parameters.get('start_datetime')}")
             start_datetime = datetime.fromisoformat(parameters["start_datetime"].replace('Z', '+00:00'))
+            logger.info(f"AI Calendar Tool - Parsed start_datetime: {start_datetime}")
+            
             end_datetime = None
             if parameters.get("end_datetime"):
                 end_datetime = datetime.fromisoformat(parameters["end_datetime"].replace('Z', '+00:00'))
@@ -243,6 +246,182 @@ class CreateCalendarEventTool(AITool):
                 "success": False,
                 "error": str(e),
                 "message": "Failed to create calendar event"
+            }
+
+
+class EditCalendarEventTool(AITool):
+    """Tool for editing existing calendar events"""
+    
+    name: str = "edit_calendar_event"
+    description: str = "Edit an existing calendar event by changing title, time, description, or location"
+    parameters: Dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "event_title": {
+                "type": "string",
+                "description": "Current title of the event to find and edit"
+            },
+            "new_title": {
+                "type": "string",
+                "description": "New title for the event"
+            },
+            "new_start_datetime": {
+                "type": "string",
+                "format": "date-time",
+                "description": "New start date and time (ISO format)"
+            },
+            "new_end_datetime": {
+                "type": "string",
+                "format": "date-time",
+                "description": "New end date and time (ISO format)"
+            },
+            "new_description": {
+                "type": "string",
+                "description": "New description for the event"
+            },
+            "new_location": {
+                "type": "string",
+                "description": "New location for the event"
+            }
+        },
+        "required": ["event_title"]
+    }
+    
+    async def execute(self, parameters: Dict[str, Any], user: User, session) -> Dict[str, Any]:
+        """Execute calendar event editing"""
+        try:
+            from app.models.calendar import CalendarEvent
+            from sqlmodel import select, and_
+            
+            event_title = parameters.get("event_title")
+            
+            # Find the event by title
+            statement = select(CalendarEvent).where(
+                and_(
+                    CalendarEvent.user_id == user.id,
+                    CalendarEvent.title.ilike(f"%{event_title}%")
+                )
+            ).order_by(CalendarEvent.start_datetime.desc())
+            
+            result = await session.execute(statement)
+            events = result.scalars().all()
+            
+            if not events:
+                return {
+                    "success": False,
+                    "error": f"No calendar event found matching '{event_title}'",
+                    "message": f"Could not find event '{event_title}'"
+                }
+            
+            # Use the first (most recent) match
+            event = events[0]
+            
+            # Update fields if provided
+            if parameters.get("new_title"):
+                event.title = parameters["new_title"]
+            
+            if parameters.get("new_start_datetime"):
+                event.start_datetime = datetime.fromisoformat(parameters["new_start_datetime"].replace('Z', '+00:00'))
+            
+            if parameters.get("new_end_datetime"):
+                event.end_datetime = datetime.fromisoformat(parameters["new_end_datetime"].replace('Z', '+00:00'))
+            elif parameters.get("new_start_datetime"):
+                # If only start time changed, maintain 1-hour duration
+                from datetime import timedelta
+                event.end_datetime = event.start_datetime + timedelta(hours=1)
+            
+            if parameters.get("new_description") is not None:
+                event.description = parameters["new_description"]
+            
+            if parameters.get("new_location") is not None:
+                event.location = parameters["new_location"]
+            
+            await session.commit()
+            await session.refresh(event)
+            
+            return {
+                "success": True,
+                "result": {
+                    "id": str(event.id),
+                    "title": event.title,
+                    "start_datetime": event.start_datetime.isoformat(),
+                    "end_datetime": event.end_datetime.isoformat() if event.end_datetime else None
+                },
+                "message": f"Updated calendar event: {event.title}"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error editing calendar event: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to edit calendar event"
+            }
+
+
+class DeleteCalendarEventTool(AITool):
+    """Tool for deleting calendar events"""
+    
+    name: str = "delete_calendar_event"
+    description: str = "Delete a calendar event by title"
+    parameters: Dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "event_title": {
+                "type": "string",
+                "description": "Title of the event to delete"
+            }
+        },
+        "required": ["event_title"]
+    }
+    
+    async def execute(self, parameters: Dict[str, Any], user: User, session) -> Dict[str, Any]:
+        """Execute calendar event deletion"""
+        try:
+            from app.models.calendar import CalendarEvent
+            from sqlmodel import select, and_
+            
+            event_title = parameters.get("event_title")
+            
+            # Find the event by title
+            statement = select(CalendarEvent).where(
+                and_(
+                    CalendarEvent.user_id == user.id,
+                    CalendarEvent.title.ilike(f"%{event_title}%")
+                )
+            ).order_by(CalendarEvent.start_datetime.desc())
+            
+            result = await session.execute(statement)
+            events = result.scalars().all()
+            
+            if not events:
+                return {
+                    "success": False,
+                    "error": f"No calendar event found matching '{event_title}'",
+                    "message": f"Could not find event '{event_title}'"
+                }
+            
+            # Delete the first (most recent) match
+            event = events[0]
+            event_title_deleted = event.title
+            
+            await session.delete(event)
+            await session.commit()
+            
+            return {
+                "success": True,
+                "result": {
+                    "deleted_event": event_title_deleted
+                },
+                "message": f"Deleted calendar event: {event_title_deleted}"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error deleting calendar event: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to delete calendar event"
             }
 
 
@@ -715,6 +894,193 @@ class GetQuestsTool(AITool):
             }
 
 
+class EditQuestTool(AITool):
+    """Tool for editing existing quest tasks"""
+    
+    name: str = "edit_quest"
+    description: str = "Edit an existing quest task by changing content, due date, or time"
+    parameters: Dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "quest_content": {
+                "type": "string",
+                "description": "Current content of the quest to find and edit (partial match)"
+            },
+            "new_content": {
+                "type": "string",
+                "description": "New content for the quest"
+            },
+            "new_date_due": {
+                "type": "string",
+                "format": "date",
+                "description": "New due date for the quest (YYYY-MM-DD format)"
+            },
+            "new_time_due": {
+                "type": "string",
+                "pattern": "^([01]?[0-9]|2[0-3]):[0-5][0-9]$",
+                "description": "New due time in HH:MM format"
+            },
+            "quest_date": {
+                "type": "string",
+                "format": "date",
+                "description": "Date of the quest (YYYY-MM-DD format), defaults to today"
+            }
+        },
+        "required": ["quest_content"]
+    }
+    
+    async def execute(self, parameters: Dict[str, Any], user: User, session) -> Dict[str, Any]:
+        try:
+            from app.models.quest import Quest
+            from datetime import date, datetime
+            from sqlmodel import select, and_
+            
+            quest_content = parameters.get("quest_content")
+            quest_date_str = parameters.get("quest_date")
+            
+            # Parse date
+            if quest_date_str:
+                quest_date = datetime.strptime(quest_date_str, "%Y-%m-%d").date()
+            else:
+                quest_date = date.today()
+            
+            # Find quest by content
+            statement = select(Quest).where(
+                and_(
+                    Quest.user_id == user.id,
+                    Quest.date_created == quest_date,
+                    Quest.content.ilike(f"%{quest_content}%")
+                )
+            ).order_by(Quest.order_index)
+            
+            result = await session.execute(statement)
+            quests = result.scalars().all()
+            
+            if not quests:
+                return {
+                    "success": False,
+                    "error": f"No quest found matching '{quest_content}' for {quest_date}",
+                    "message": f"Could not find quest matching '{quest_content}'"
+                }
+            
+            # Use the first match
+            quest = quests[0]
+            
+            # Update fields if provided
+            if parameters.get("new_content"):
+                quest.content = parameters["new_content"]
+            
+            if parameters.get("new_date_due"):
+                quest.date_due = datetime.strptime(parameters["new_date_due"], "%Y-%m-%d").date()
+            
+            if parameters.get("new_time_due"):
+                quest.time_due = parameters["new_time_due"]
+            
+            await session.commit()
+            await session.refresh(quest)
+            
+            return {
+                "success": True,
+                "quest": {
+                    "id": str(quest.id),
+                    "content": quest.content,
+                    "date_due": quest.date_due.isoformat() if quest.date_due else None,
+                    "time_due": quest.time_due,
+                    "is_complete": quest.is_complete
+                },
+                "message": f"Updated quest: {quest.content}"
+            }
+            
+        except Exception as e:
+            await session.rollback()
+            logger.error(f"Error editing quest via AI: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to edit quest"
+            }
+
+
+class DeleteQuestTool(AITool):
+    """Tool for deleting quest tasks"""
+    
+    name: str = "delete_quest"
+    description: str = "Delete a quest task by content"
+    parameters: Dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "quest_content": {
+                "type": "string",
+                "description": "Content of the quest to delete (partial match)"
+            },
+            "quest_date": {
+                "type": "string",
+                "format": "date",
+                "description": "Date of the quest (YYYY-MM-DD format), defaults to today"
+            }
+        },
+        "required": ["quest_content"]
+    }
+    
+    async def execute(self, parameters: Dict[str, Any], user: User, session) -> Dict[str, Any]:
+        try:
+            from app.models.quest import Quest
+            from datetime import date, datetime
+            from sqlmodel import select, and_
+            
+            quest_content = parameters.get("quest_content")
+            quest_date_str = parameters.get("quest_date")
+            
+            # Parse date
+            if quest_date_str:
+                quest_date = datetime.strptime(quest_date_str, "%Y-%m-%d").date()
+            else:
+                quest_date = date.today()
+            
+            # Find quest by content
+            statement = select(Quest).where(
+                and_(
+                    Quest.user_id == user.id,
+                    Quest.date_created == quest_date,
+                    Quest.content.ilike(f"%{quest_content}%")
+                )
+            ).order_by(Quest.order_index)
+            
+            result = await session.execute(statement)
+            quests = result.scalars().all()
+            
+            if not quests:
+                return {
+                    "success": False,
+                    "error": f"No quest found matching '{quest_content}' for {quest_date}",
+                    "message": f"Could not find quest matching '{quest_content}'"
+                }
+            
+            # Delete the first match
+            quest = quests[0]
+            quest_content_deleted = quest.content
+            
+            await session.delete(quest)
+            await session.commit()
+            
+            return {
+                "success": True,
+                "result": {
+                    "deleted_quest": quest_content_deleted
+                },
+                "message": f"Deleted quest: {quest_content_deleted}"
+            }
+            
+        except Exception as e:
+            await session.rollback()
+            logger.error(f"Error deleting quest via AI: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to delete quest"
+            }
+
+
 class InternetSearchTool(AITool):
     """Tool for searching the internet using Serper API"""
     
@@ -827,11 +1193,15 @@ class InternetSearchTool(AITool):
 AI_TOOLS_REGISTRY: Dict[str, AITool] = {
     "create_journal_entry": CreateJournalEntryTool(),
     "create_calendar_event": CreateCalendarEventTool(),
+    "edit_calendar_event": EditCalendarEventTool(),
+    "delete_calendar_event": DeleteCalendarEventTool(),
     "create_board": CreateBoardTool(),
     "create_card": CreateCardTool(),
     "get_boards": GetBoardsTool(),
     "create_quest": CreateQuestTool(),
     "complete_quest": CompleteQuestTool(),
+    "edit_quest": EditQuestTool(),
+    "delete_quest": DeleteQuestTool(),
     "get_quests": GetQuestsTool(),
     "search_internet": InternetSearchTool()
 }
