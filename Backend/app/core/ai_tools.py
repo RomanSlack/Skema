@@ -425,6 +425,115 @@ class DeleteCalendarEventTool(AITool):
             }
 
 
+class GetCalendarEventsTool(AITool):
+    """Tool for getting calendar events"""
+    
+    name: str = "get_calendar_events"
+    description: str = "Get calendar events for a specific date range or today"
+    parameters: Dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "start_date": {
+                "type": "string",
+                "format": "date",
+                "description": "Start date to get events for (YYYY-MM-DD format), defaults to today"
+            },
+            "end_date": {
+                "type": "string",
+                "format": "date",
+                "description": "End date to get events for (YYYY-MM-DD format), defaults to start_date"
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Maximum number of events to return (default: 20)"
+            }
+        },
+        "required": []
+    }
+    
+    async def execute(self, parameters: Dict[str, Any], user: User, session) -> Dict[str, Any]:
+        """Execute calendar events retrieval"""
+        try:
+            from app.models.calendar import CalendarEvent
+            from sqlmodel import select, and_
+            from datetime import date, datetime
+            
+            start_date_str = parameters.get("start_date")
+            end_date_str = parameters.get("end_date")
+            limit = parameters.get("limit", 20)
+            
+            # Parse dates
+            if start_date_str:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            else:
+                start_date = date.today()
+            
+            if end_date_str:
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+            else:
+                end_date = start_date
+            
+            # Convert to datetime for comparison
+            start_datetime = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+            end_datetime = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+            
+            # Query events
+            statement = select(CalendarEvent).where(
+                and_(
+                    CalendarEvent.user_id == user.id,
+                    CalendarEvent.start_datetime >= start_datetime,
+                    CalendarEvent.start_datetime <= end_datetime
+                )
+            ).order_by(CalendarEvent.start_datetime).limit(limit)
+            
+            result = await session.execute(statement)
+            events = result.scalars().all()
+            
+            # Format events
+            events_list = []
+            for event in events:
+                # Convert UTC times to Eastern for display
+                start_eastern = event.start_datetime.astimezone(timezone.utc).strftime("%I:%M %p")
+                end_eastern = ""
+                if event.end_datetime:
+                    end_eastern = event.end_datetime.astimezone(timezone.utc).strftime("%I:%M %p")
+                
+                events_list.append({
+                    "id": str(event.id),
+                    "title": event.title,
+                    "description": event.description or "",
+                    "start_datetime": event.start_datetime.isoformat(),
+                    "end_datetime": event.end_datetime.isoformat() if event.end_datetime else None,
+                    "start_time_display": start_eastern,
+                    "end_time_display": end_eastern,
+                    "location": event.location or "",
+                    "is_all_day": event.is_all_day,
+                    "color": event.color
+                })
+            
+            date_range = start_date.isoformat()
+            if end_date != start_date:
+                date_range = f"{start_date.isoformat()} to {end_date.isoformat()}"
+            
+            return {
+                "success": True,
+                "events": events_list,
+                "summary": {
+                    "date_range": date_range,
+                    "total_events": len(events_list)
+                },
+                "message": f"Found {len(events_list)} events for {date_range}"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting calendar events: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to get calendar events"
+            }
+
+
 class CreateBoardTool(AITool):
     """Tool for creating boards"""
     
@@ -1195,6 +1304,7 @@ AI_TOOLS_REGISTRY: Dict[str, AITool] = {
     "create_calendar_event": CreateCalendarEventTool(),
     "edit_calendar_event": EditCalendarEventTool(),
     "delete_calendar_event": DeleteCalendarEventTool(),
+    "get_calendar_events": GetCalendarEventsTool(),
     "create_board": CreateBoardTool(),
     "create_card": CreateCardTool(),
     "get_boards": GetBoardsTool(),
