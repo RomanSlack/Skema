@@ -3,6 +3,7 @@ AI Tools for natural language processing and automation
 """
 import json
 import logging
+import random
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Callable
 from uuid import UUID
@@ -18,6 +19,49 @@ from app.schemas.calendar import CalendarEventCreate
 from app.schemas.journal import JournalEntryCreate
 
 logger = logging.getLogger(__name__)
+
+
+# Color palettes for random selection
+CALENDAR_COLORS = [
+    "#3b82f6",  # blue
+    "#ef4444",  # red
+    "#10b981",  # green
+    "#f59e0b",  # yellow
+    "#8b5cf6",  # purple
+    "#06b6d4",  # cyan
+    "#ec4899",  # pink
+    "#84cc16",  # lime
+    "#f97316",  # orange
+    "#6366f1",  # indigo
+]
+
+BOARD_COLORS = [
+    "#3b82f6",  # blue
+    "#ef4444",  # red
+    "#10b981",  # green
+    "#f59e0b",  # yellow
+    "#8b5cf6",  # purple
+    "#06b6d4",  # cyan
+    "#ec4899",  # pink
+    "#84cc16",  # lime
+    "#f97316",  # orange
+    "#6366f1",  # indigo
+    "#10b981",  # emerald
+    "#14b8a6",  # teal
+    "#8b5cf6",  # violet
+    "#f43f5e",  # rose
+    "#64748b",  # slate
+]
+
+
+def get_random_calendar_color() -> str:
+    """Get a random color for calendar events"""
+    return random.choice(CALENDAR_COLORS)
+
+
+def get_random_board_color() -> str:
+    """Get a random color for boards"""
+    return random.choice(BOARD_COLORS)
 
 
 class AITool(BaseModel):
@@ -64,7 +108,7 @@ class CreateJournalEntryTool(AITool):
     async def execute(self, parameters: Dict[str, Any], user: User, session) -> Dict[str, Any]:
         """Execute journal entry creation"""
         try:
-            from app.api.journal import create_journal_entry
+            from app.models.journal import JournalEntry
             
             # Parse entry date
             entry_date = parameters.get("entry_date")
@@ -73,16 +117,22 @@ class CreateJournalEntryTool(AITool):
             else:
                 entry_date = datetime.now(timezone.utc).date()
             
-            # Create journal entry data
-            journal_data = JournalEntryCreate(
+            # Create journal entry directly
+            journal_entry = JournalEntry(
+                user_id=user.id,
                 title=parameters["title"],
                 content=parameters["content"],
                 mood=parameters.get("mood", "okay"),
-                entry_date=entry_date
+                entry_date=entry_date,
+                tags=[],
+                meta_data={},
+                is_private=False,
+                is_favorite=False
             )
             
-            # Create the journal entry
-            journal_entry = await create_journal_entry(journal_data, user, session)
+            session.add(journal_entry)
+            await session.commit()
+            await session.refresh(journal_entry)
             
             return {
                 "success": True,
@@ -144,7 +194,8 @@ class CreateCalendarEventTool(AITool):
     async def execute(self, parameters: Dict[str, Any], user: User, session) -> Dict[str, Any]:
         """Execute calendar event creation"""
         try:
-            from app.api.calendar import create_calendar_event
+            from app.models.calendar import CalendarEvent
+            from app.schemas.calendar import CalendarEventResponse
             
             # Parse dates
             start_datetime = datetime.fromisoformat(parameters["start_datetime"].replace('Z', '+00:00'))
@@ -153,20 +204,27 @@ class CreateCalendarEventTool(AITool):
                 end_datetime = datetime.fromisoformat(parameters["end_datetime"].replace('Z', '+00:00'))
             else:
                 # Default to 1 hour duration if not specified
-                end_datetime = start_datetime.replace(hour=start_datetime.hour + 1)
+                from datetime import timedelta
+                end_datetime = start_datetime + timedelta(hours=1)
             
-            # Create calendar event data
-            event_data = CalendarEventCreate(
+            # Create calendar event directly
+            calendar_event = CalendarEvent(
+                user_id=user.id,
                 title=parameters["title"],
                 description=parameters.get("description", ""),
                 start_datetime=start_datetime,
                 end_datetime=end_datetime,
+                location=parameters.get("location"),
+                event_type="meeting",
+                color=get_random_calendar_color(),
+                meta_data={},
                 is_all_day=parameters.get("is_all_day", False),
-                location=parameters.get("location")
+                is_recurring=False
             )
             
-            # Create the calendar event
-            calendar_event = await create_calendar_event(event_data, user, session)
+            session.add(calendar_event)
+            await session.commit()
+            await session.refresh(calendar_event)
             
             return {
                 "success": True,
@@ -176,7 +234,7 @@ class CreateCalendarEventTool(AITool):
                     "start_datetime": calendar_event.start_datetime.isoformat(),
                     "end_datetime": calendar_event.end_datetime.isoformat() if calendar_event.end_datetime else None
                 },
-                "message": f"Created calendar event: {calendar_event.title}"
+                "message": f"Created calendar event: {calendar_event.title} for {start_datetime.strftime('%B %d, %Y at %I:%M %p')}"
             }
             
         except Exception as e:
@@ -203,10 +261,6 @@ class CreateBoardTool(AITool):
             "description": {
                 "type": "string",
                 "description": "The description of the board"
-            },
-            "color": {
-                "type": "string",
-                "description": "Color theme for the board (e.g., 'bg-blue-500', 'bg-green-500')"
             }
         },
         "required": ["title"]
@@ -215,17 +269,21 @@ class CreateBoardTool(AITool):
     async def execute(self, parameters: Dict[str, Any], user: User, session) -> Dict[str, Any]:
         """Execute board creation"""
         try:
-            from app.api.boards import create_board
+            from app.models.board import Board
             
-            # Create board data
-            board_data = BoardCreate(
+            # Create board directly
+            board = Board(
+                user_id=user.id,
                 title=parameters["title"],
                 description=parameters.get("description", ""),
-                color=parameters.get("color", "bg-blue-500")
+                color=get_random_board_color(),
+                is_archived=False,
+                settings={}
             )
             
-            # Create the board
-            board = await create_board(board_data, user, session)
+            session.add(board)
+            await session.commit()
+            await session.refresh(board)
             
             return {
                 "success": True,
@@ -282,24 +340,27 @@ class CreateCardTool(AITool):
     async def execute(self, parameters: Dict[str, Any], user: User, session) -> Dict[str, Any]:
         """Execute card creation"""
         try:
-            from app.api.boards import create_card
+            from app.models.board import Card
             
             # Parse due date if provided
             due_date = None
             if parameters.get("due_date"):
                 due_date = datetime.fromisoformat(parameters["due_date"]).date()
             
-            # Create card data
-            card_data = CardCreate(
+            # Create card directly
+            card = Card(
                 title=parameters["title"],
                 description=parameters.get("description", ""),
+                position=0,
+                status="todo",
+                priority="medium",
                 board_id=UUID(parameters["board_id"]),
-                column_id=UUID(parameters["column_id"]) if parameters.get("column_id") else None,
-                due_date=due_date
+                meta_data={"due_date": due_date.isoformat() if due_date else None}
             )
             
-            # Create the card
-            card = await create_card(card_data, user, session)
+            session.add(card)
+            await session.commit()
+            await session.refresh(card)
             
             return {
                 "success": True,
@@ -339,13 +400,18 @@ class GetBoardsTool(AITool):
     async def execute(self, parameters: Dict[str, Any], user: User, session) -> Dict[str, Any]:
         """Execute get boards"""
         try:
-            from app.api.boards import get_user_boards
+            from app.models.board import Board
+            from sqlmodel import select
             
             limit = parameters.get("limit", 10)
-            boards_response = await get_user_boards(1, limit, user, session)
+            
+            # Query boards directly
+            query = select(Board).where(Board.user_id == user.id).limit(limit)
+            result = await session.exec(query)
+            boards = result.all()
             
             boards_list = []
-            for board in boards_response.items:
+            for board in boards:
                 boards_list.append({
                     "id": str(board.id),
                     "title": board.title,

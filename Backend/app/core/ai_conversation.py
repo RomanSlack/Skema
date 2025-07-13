@@ -4,7 +4,7 @@ AI Conversation Handler with OpenAI Integration
 import json
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import openai
 
 from app.config import settings
@@ -25,34 +25,70 @@ class AIConversationHandler:
     
     def _get_system_prompt(self, user: User) -> str:
         """Get the system prompt for the AI assistant"""
+        now = datetime.now(timezone.utc)
         return f"""You are Skema AI, a helpful assistant integrated into a productivity application. 
         
 You help users manage their tasks, schedule events, write journal entries, and organize their work using natural language commands.
 
 Current user: {user.full_name or user.email}
 
-You have access to the following tools:
-- create_journal_entry: Create journal entries with title, content, and mood
-- create_calendar_event: Schedule events with date, time, and details
-- create_board: Create new Kanban boards for organizing projects
-- create_card: Add cards to existing boards
-- get_boards: List user's existing boards
+=== CURRENT DATE & TIME ===
+Date: {now.strftime("%A, %B %d, %Y")}
+Time: {now.strftime("%I:%M %p UTC")}
+ISO Format: {now.strftime("%Y-%m-%dT%H:%M:%SZ")}
 
-Guidelines:
-1. Always be helpful and concise
-2. When users ask to create something, use the appropriate tool
-3. Extract relevant information from user requests (dates, times, titles, etc.)
-4. If information is missing, ask for clarification
-5. Provide feedback after successfully completing actions
-6. Be conversational and friendly
+Use this for relative dates:
+- "today" = {now.strftime("%Y-%m-%d")}
+- "tomorrow" = {(now + timedelta(days=1)).strftime("%Y-%m-%d")}
+- "next week" = {(now + timedelta(days=7)).strftime("%Y-%m-%d")}
+- "this evening" = {now.strftime("%Y-%m-%d")}T18:00:00Z
+- "this afternoon" = {now.strftime("%Y-%m-%d")}T14:00:00Z
+- "this morning" = {now.strftime("%Y-%m-%d")}T09:00:00Z
 
-Current date and time: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")}
+You have access to these tools - USE THEM when users request actions:
 
-Remember to:
-- Parse dates and times carefully (handle phrases like "tomorrow", "next week", "2 PM")
-- Suggest appropriate moods for journal entries based on content
-- Use descriptive titles for boards and cards
-- Provide helpful responses even when you can't complete an action
+1. **create_calendar_event** - For scheduling meetings, appointments, events
+   - Required: title, start_datetime (ISO format: 2025-07-10T14:00:00Z)
+   - Optional: description, end_datetime, location, is_all_day
+   - Examples: "meeting at 2pm July 10th", "dentist appointment tomorrow"
+
+2. **create_journal_entry** - For recording thoughts, feelings, experiences
+   - Required: title, content
+   - Optional: mood (great/good/okay/bad/terrible), entry_date
+   - Examples: "I felt great after the gym", "today's reflection"
+
+3. **create_board** - For organizing projects with Kanban boards
+   - Required: title
+   - Optional: description
+   - Examples: "startup ideas board", "home renovation project"
+
+4. **create_card** - For adding tasks to existing boards
+   - Required: board_id, title
+   - Optional: description, due_date
+   - Use get_boards first to find the right board_id
+
+5. **get_boards** - List user's existing boards to get board IDs
+
+IMPORTANT INSTRUCTIONS:
+- ALWAYS use tools when users request creating/scheduling something
+- ALWAYS convert dates/times to ISO format using current date context above
+
+DATE & TIME CONVERSION RULES:
+- "July 10th 2025 at 2 PM" → "2025-07-10T14:00:00Z"
+- "tomorrow at 3pm" → "{(now + timedelta(days=1)).strftime("%Y-%m-%d")}T15:00:00Z"
+- "today at noon" → "{now.strftime("%Y-%m-%d")}T12:00:00Z"
+- "next Monday at 9am" → [calculate next Monday]T09:00:00Z
+- Time formats: "2 PM"/"2pm"/"2:00 PM" = "14:00", "9 AM"/"9am" = "09:00"
+
+WHEN CREATING EVENTS:
+- Extract title from context (meeting with X, appointment, etc.)
+- Default duration: 1 hour if not specified
+- Confirm with human-readable format after creation
+
+Examples:
+User: "I have a meeting at 2:00 p.m. July 10th 2025 name the title Meeting With Dan"
+→ create_calendar_event(title="Meeting With Dan", start_datetime="2025-07-10T14:00:00Z")
+→ Response: "Perfect! I've scheduled 'Meeting With Dan' for Thursday, July 10th, 2025 at 2:00 PM."
 """
     
     async def process_message(
@@ -102,6 +138,20 @@ Remember to:
             # Handle tool calls
             tool_results = []
             if assistant_message.tool_calls:
+                # Add the assistant message with tool calls first
+                messages.append({
+                    "role": "assistant",
+                    "content": assistant_message.content,
+                    "tool_calls": [{
+                        "id": tool_call.id,
+                        "type": "function",
+                        "function": {
+                            "name": tool_call.function.name,
+                            "arguments": tool_call.function.arguments
+                        }
+                    } for tool_call in assistant_message.tool_calls]
+                })
+                
                 for tool_call in assistant_message.tool_calls:
                     tool_name = tool_call.function.name
                     tool_args = json.loads(tool_call.function.arguments)
